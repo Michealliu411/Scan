@@ -4,9 +4,17 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductionLinesModule } from './production-lines/production-lines.module';
+import { SessionsModule } from './sessions/sessions.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, ProductionLinesModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    ProductionLinesModule,
+    UsersModule,
+    SessionsModule
+  ],
   controllers: [AppController],
   providers: [AppService]
 })
