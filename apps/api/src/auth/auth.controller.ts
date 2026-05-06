@@ -5,14 +5,17 @@ import {
   Post,
   Req,
   Res,
-  UnauthorizedException
+  UnauthorizedException,
+  UseGuards
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
 import { ActiveSessionContext, SessionsService } from '../sessions/sessions.service';
 import { AuthService } from './auth.service';
+import { CurrentUser } from './current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
+import { SessionGuard } from './session.guard';
 
 export type AuthenticatedRequest = Request & {
   auth?: ActiveSessionContext;
@@ -44,6 +47,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @UseGuards(SessionGuard)
   async logout(
     @Req() request: AuthenticatedRequest,
     @Res({ passthrough: true }) response: Response
@@ -55,8 +59,8 @@ export class AuthController {
   }
 
   @Get('me')
-  me(@Req() request: AuthenticatedRequest) {
-    const auth = this.requireAuth(request);
+  @UseGuards(SessionGuard)
+  me(@CurrentUser() auth: ActiveSessionContext) {
     return {
       user: this.auth.toPublicUser(auth.user),
       session: {
@@ -74,11 +78,11 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @UseGuards(SessionGuard)
   async changePassword(
-    @Req() request: AuthenticatedRequest,
+    @CurrentUser() auth: ActiveSessionContext,
     @Body() dto: ChangePasswordDto
   ): Promise<{ ok: true; user: ReturnType<AuthService['toPublicUser']> }> {
-    const auth = this.requireAuth(request);
     await this.auth.changePassword(auth.user.id, dto);
     return {
       ok: true,
