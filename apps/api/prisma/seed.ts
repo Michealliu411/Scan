@@ -70,11 +70,13 @@ function resolveInitialAdminPassword(): string {
     return configuredPassword;
   }
 
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('INITIAL_ADMIN_PASSWORD is required when seeding production admin.');
+  if (process.env.ALLOW_DEFAULT_ADMIN_PASSWORD === 'true') {
+    return 'admin';
   }
 
-  return 'admin';
+  throw new Error(
+    'INITIAL_ADMIN_PASSWORD is required. Set ALLOW_DEFAULT_ADMIN_PASSWORD=true only for local development.'
+  );
 }
 
 main()
