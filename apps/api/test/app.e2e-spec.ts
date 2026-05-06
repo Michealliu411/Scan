@@ -3,6 +3,8 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
+process.env.DATABASE_URL ??= 'file:/private/tmp/scan-api-test.db';
+
 describe('App health endpoint', () => {
   let app: INestApplication;
 
