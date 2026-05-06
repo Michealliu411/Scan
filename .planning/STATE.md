@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: Executing Phase 01
-last_updated: "2026-05-06T05:28:00Z"
+last_updated: "2026-05-06T05:46:49Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 50
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State: Workshop Inspection Scan Statistics System
@@ -45,7 +45,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 
 ## Roadmap Position
 
-1. Phase 1 - Foundation, Auth, and Data Model: In progress (2/4 plans complete)
+1. Phase 1 - Foundation, Auth, and Data Model: In progress (3/4 plans complete)
 2. Phase 2 - Inspection Scanning Core: Pending
 3. Phase 3 - Master Data Administration: Pending
 4. Phase 4 - Special Barcode Workflows: Pending
@@ -64,3 +64,4 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 - 2026-05-06: Planned Phase 1 into 4 sequential plans covering monorepo scaffold, Prisma/data/time utilities, auth/RBAC API, and frontend login/app shell.
 - 2026-05-06: Completed Plan 01-01 with pnpm monorepo scaffold, NestJS health API, React/Vite web shell, lockfile, typecheck, and tests.
 - 2026-05-06: Completed Plan 01-02 with Prisma SQLite schema, initial migration SQL, hashed admin seed, 14 production lines, Beijing-time utilities, and production-line lookup API.
+- 2026-05-06: Completed Plan 01-03 with backend auth APIs, httpOnly cookie sessions, newest-login-wins invalidation, session/RBAC guards, password-change support, and auth e2e tests.

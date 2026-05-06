@@ -7,17 +7,17 @@
 
 ### Authentication and Session
 
-- [ ] **AUTH-01**: User can log in with username and password.
+- [x] **AUTH-01**: User can log in with username and password.
 - [x] **AUTH-02**: User can select a production line during login.
 - [ ] **AUTH-03**: Browser stores the last successful login user and production line as defaults for the next login.
-- [ ] **AUTH-04**: User can log out and clear the active session.
+- [x] **AUTH-04**: User can log out and clear the active session.
 
 ### Roles and Access
 
 - [ ] **ROLE-01**: Inspector role can access only the inspection scanning screen.
 - [ ] **ROLE-02**: Query user role can access only query analysis screens.
 - [ ] **ROLE-03**: Administrator role can access scanning, query analysis, and all master-data screens.
-- [ ] **ROLE-04**: Unauthorized routes and actions are blocked on both frontend navigation and backend API checks.
+- [x] **ROLE-04**: Unauthorized routes and actions are blocked on both frontend navigation and backend API checks.
 
 ### Inspection Scanning
 
@@ -129,14 +129,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
 | AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Pending |
-| AUTH-04 | Phase 1 | Pending |
+| AUTH-04 | Phase 1 | Complete |
 | ROLE-01 | Phase 1 | Pending |
 | ROLE-02 | Phase 1 | Pending |
 | ROLE-03 | Phase 1 | Pending |
-| ROLE-04 | Phase 1 | Pending |
+| ROLE-04 | Phase 1 | Complete |
 | PLAT-01 | Phase 1 | Complete |
 | PLAT-02 | Phase 1 | Complete |
 | PLAT-03 | Phase 1 | Complete |

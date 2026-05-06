@@ -41,7 +41,7 @@ This roadmap builds the system as a deployable internal Web application in six p
 |------|------|-----------|--------------|--------|
 | 01-01 | 1 | Monorepo scaffold and baseline tooling | PLAT-02 | Complete 2026-05-06 |
 | 01-02 | 2 | Prisma schema, seed data, production lines, and Beijing-time utilities | PLAT-01, PLAT-03, AUTH-02 | Complete 2026-05-06 |
-| 01-03 | 3 | Authentication, one-active-session policy, and backend RBAC | AUTH-01, AUTH-02, AUTH-04, ROLE-04, PLAT-02, PLAT-03 | Pending |
+| 01-03 | 3 | Authentication, one-active-session policy, and backend RBAC | AUTH-01, AUTH-02, AUTH-04, ROLE-04, PLAT-02, PLAT-03 | Complete 2026-05-06 |
 | 01-04 | 4 | Web login flow, role-aware app shell, and session-expired UX | AUTH-01, AUTH-02, AUTH-03, AUTH-04, ROLE-01, ROLE-02, ROLE-03, ROLE-04, PLAT-02 | Pending |
 
 ### Phase 2: Inspection Scanning Core
