@@ -20,7 +20,8 @@ if (productionLines.length !== 14 || productionLines.at(-1)?.code !== 'LINE-14')
 }
 
 async function main(): Promise<void> {
-  const adminPasswordHash = await argon2.hash('admin');
+  const initialAdminPassword = resolveInitialAdminPassword();
+  const adminPasswordHash = await argon2.hash(initialAdminPassword);
 
   await prisma.user.upsert({
     where: { username: 'admin' },
@@ -61,6 +62,19 @@ async function main(): Promise<void> {
   });
 
   console.log('Seed data applied.');
+}
+
+function resolveInitialAdminPassword(): string {
+  const configuredPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  if (configuredPassword) {
+    return configuredPassword;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('INITIAL_ADMIN_PASSWORD is required when seeding production admin.');
+  }
+
+  return 'admin';
 }
 
 main()

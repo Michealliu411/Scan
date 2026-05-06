@@ -4,15 +4,40 @@ import { App } from './App';
 
 describe('App', () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } }))
-    );
+    vi.restoreAllMocks();
+    window.localStorage.clear();
   });
 
-  it('renders the system title', () => {
+  it('renders the system title after session hydration falls back to login', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'SESSION_EXPIRED' }), { status: 401 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } }))
+    );
+
     render(<App />);
 
-    expect(screen.getByText('车间检验扫描统计系统')).toBeTruthy();
+    expect(await screen.findByText('车间检验扫描统计系统')).toBeTruthy();
+  });
+
+  it('hydrates a valid cookie session from auth/me on startup', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: 'user-1', username: 'admin', role: 'ADMIN', mustChangePassword: false },
+            productionLine: { id: 'line-1', code: 'L01', name: '一号产线' }
+          }),
+          { headers: { 'Content-Type': 'application/json' } }
+        )
+      )
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText('admin')).toBeTruthy();
+    expect(screen.getByText('一号产线')).toBeTruthy();
   });
 });

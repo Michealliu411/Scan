@@ -18,14 +18,7 @@ describe('LoginPage', () => {
     window.localStorage.setItem('scan:lastUsername', 'admin');
     window.localStorage.setItem('scan:lastProductionLineId', 'line-2');
 
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse(productionLines))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          user: { id: 'user-1', username: 'admin', role: 'ADMIN', mustChangePassword: false },
-          productionLine: productionLines[1]
-        })
-      );
+    const fetchMock = createLoginFetchMock();
     vi.stubGlobal('fetch', fetchMock);
 
     renderLoginPage();
@@ -45,7 +38,7 @@ describe('LoginPage', () => {
   });
 
   it('blocks login when password is missing', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(productionLines));
+    const fetchMock = createLoginFetchMock();
     vi.stubGlobal('fetch', fetchMock);
 
     renderLoginPage();
@@ -56,7 +49,7 @@ describe('LoginPage', () => {
     const loginButton = screen.getByRole('button', { name: '登录' }) as HTMLButtonElement;
     expect(loginButton.disabled).toBe(true);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -66,6 +59,31 @@ function renderLoginPage() {
       <LoginPage onLoginComplete={() => undefined} />
     </AuthProvider>
   );
+}
+
+function createLoginFetchMock() {
+  return vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.endsWith('/auth/me')) {
+      return Promise.resolve(jsonResponse({ code: 'SESSION_EXPIRED' }, { status: 401 }));
+    }
+
+    if (url.endsWith('/production-lines')) {
+      return Promise.resolve(jsonResponse(productionLines));
+    }
+
+    if (url.endsWith('/auth/login')) {
+      return Promise.resolve(
+        jsonResponse({
+          user: { id: 'user-1', username: 'admin', role: 'ADMIN', mustChangePassword: false },
+          productionLine: productionLines[1]
+        })
+      );
+    }
+
+    return Promise.resolve(jsonResponse({ message: 'unexpected request' }, { status: 404 }));
+  });
 }
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {

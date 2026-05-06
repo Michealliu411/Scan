@@ -60,6 +60,14 @@ export class AuthService {
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user || !(await this.users.verifyPassword(user, dto.currentPassword))) {
+      throw new ForbiddenException({
+        code: 'CURRENT_PASSWORD_INVALID',
+        message: '当前密码错误'
+      });
+    }
+
     await this.users.changePassword(userId, dto.newPassword);
   }
 

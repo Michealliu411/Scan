@@ -5,6 +5,7 @@ type ApiFetchOptions = RequestInit & {
 type SessionExpiredHandler = () => void;
 
 let sessionExpiredHandler: SessionExpiredHandler | undefined;
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 
 export function setSessionExpiredHandler(handler: SessionExpiredHandler | undefined): void {
   sessionExpiredHandler = handler;
@@ -12,7 +13,7 @@ export function setSessionExpiredHandler(handler: SessionExpiredHandler | undefi
 
 export async function apiFetch<TResponse>(path: string, options: ApiFetchOptions = {}): Promise<TResponse> {
   const { skipSessionExpiredHandler, headers, ...requestOptions } = options;
-  const response = await fetch(path, {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...requestOptions,
     credentials: 'include',
     headers: {

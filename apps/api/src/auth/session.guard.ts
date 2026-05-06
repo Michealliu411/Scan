@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { ActiveSessionContext, SessionsService } from '../sessions/sessions.service';
@@ -29,6 +29,13 @@ export class SessionGuard implements CanActivate {
     }
 
     request.auth = auth;
+    if (auth.user.mustChangePassword && !this.isPasswordChangeAllowed(request)) {
+      throw new ForbiddenException({
+        code: 'PASSWORD_CHANGE_REQUIRED',
+        message: '请先修改初始密码'
+      });
+    }
+
     await this.sessions.touchSession(auth.id);
     return true;
   }
@@ -36,6 +43,14 @@ export class SessionGuard implements CanActivate {
   private readSessionToken(request: CookieRequest): string | undefined {
     const cookieName = this.config.get<string>('COOKIE_NAME', 'scan_session');
     return request.cookies?.[cookieName] ?? request.signedCookies?.[cookieName];
+  }
+
+  private isPasswordChangeAllowed(request: CookieRequest): boolean {
+    return (
+      (request.method === 'GET' && request.path === '/auth/me') ||
+      (request.method === 'POST' && request.path === '/auth/change-password') ||
+      (request.method === 'POST' && request.path === '/auth/logout')
+    );
   }
 
   private sessionExpired(): UnauthorizedException {

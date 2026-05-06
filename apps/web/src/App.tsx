@@ -19,6 +19,16 @@ function AppRoutes() {
 
   const loginPage = <LoginPage onLoginComplete={() => setRouteKey((key) => key + 1)} />;
 
+  if (auth.isCheckingSession) {
+    return (
+      <main className="login-page" aria-busy="true">
+        <div className="login-panel">
+          <p className="muted-text">正在检查登录状态...</p>
+        </div>
+      </main>
+    );
+  }
+
   if (!auth.session) {
     return loginPage;
   }

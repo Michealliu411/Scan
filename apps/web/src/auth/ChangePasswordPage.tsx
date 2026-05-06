@@ -18,14 +18,15 @@ type ChangePasswordResponse = {
 
 export function ChangePasswordPage({ onPasswordChanged }: ChangePasswordPageProps) {
   const auth = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit = useMemo(
-    () => Boolean(newPassword && confirmPassword && !isSubmitting),
-    [newPassword, confirmPassword, isSubmitting]
+    () => Boolean(currentPassword && newPassword && confirmPassword && !isSubmitting),
+    [currentPassword, newPassword, confirmPassword, isSubmitting]
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -46,7 +47,7 @@ export function ChangePasswordPage({ onPasswordChanged }: ChangePasswordPageProp
     try {
       const response = await apiFetch<ChangePasswordResponse>('/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify({ newPassword })
+        body: JSON.stringify({ currentPassword, newPassword })
       });
       const nextSession: AuthSession = {
         ...auth.session,
@@ -76,6 +77,13 @@ export function ChangePasswordPage({ onPasswordChanged }: ChangePasswordPageProp
         {error ? <Alert variant="error">{error}</Alert> : null}
 
         <div className="login-fields">
+          <TextInput
+            label="当前密码"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
           <TextInput
             label="新密码"
             type="password"

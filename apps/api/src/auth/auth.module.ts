@@ -11,6 +11,6 @@ import { SessionGuard } from './session.guard';
   imports: [UsersModule, SessionsModule, ProductionLinesModule],
   controllers: [AuthController],
   providers: [AuthService, SessionGuard, RolesGuard],
-  exports: [AuthService]
+  exports: [AuthService, SessionGuard, RolesGuard]
 })
 export class AuthModule {}

@@ -1,4 +1,9 @@
-import { ExecutionContext, ForbiddenException, INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { Role } from '@prisma/client';
@@ -11,6 +16,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { Roles } from '../src/auth/roles.decorator';
 import { RolesGuard } from '../src/auth/roles.guard';
+import { SessionGuard } from '../src/auth/session.guard';
 
 const dbPath = `/private/tmp/scan-auth-e2e-${process.pid}.db`;
 process.env.DATABASE_URL = `file:${dbPath}`;
@@ -185,7 +191,7 @@ describe('Auth session flow', () => {
 
     const response = await agent
       .post('/auth/change-password')
-      .send({ newPassword: 'updated-password' })
+      .send({ currentPassword: 'admin', newPassword: 'updated-password' })
       .expect(201);
 
     expect(response.body.user.mustChangePassword).toBe(false);
@@ -193,6 +199,26 @@ describe('Auth session flow', () => {
     const admin = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' } });
     expect(admin.mustChangePassword).toBe(false);
     await expect(argon2.verify(admin.passwordHash, 'updated-password')).resolves.toBe(true);
+  });
+
+  it('requires current password when changing password', async () => {
+    const agent = request.agent(app.getHttpServer());
+
+    await agent
+      .post('/auth/login')
+      .send({
+        username: 'admin',
+        password: 'admin',
+        productionLineId
+      })
+      .expect(201);
+
+    const response = await agent
+      .post('/auth/change-password')
+      .send({ currentPassword: 'wrong-password', newPassword: 'updated-password' })
+      .expect(403);
+
+    expect(response.body.code).toBe('CURRENT_PASSWORD_INVALID');
   });
 
   it('invalidates the first session when the same user logs in twice', async () => {
@@ -270,5 +296,44 @@ describe('RolesGuard', () => {
     } as unknown as ExecutionContext;
 
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+  });
+});
+
+describe('SessionGuard password-change gate', () => {
+  it('blocks protected API access until initial password is changed', async () => {
+    const guard = new SessionGuard(
+      {
+        findActiveByToken: async () => ({
+          id: 'session-1',
+          user: {
+            isActive: true,
+            mustChangePassword: true
+          },
+          productionLine: {
+            isActive: true
+          }
+        }),
+        touchSession: async () => undefined
+      } as never,
+      {
+        get: () => 'scan_session'
+      } as never
+    );
+
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({
+          cookies: { scan_session: 'token' },
+          method: 'GET',
+          path: '/protected-resource'
+        })
+      })
+    } as unknown as ExecutionContext;
+
+    await expect(guard.canActivate(context)).rejects.toMatchObject({
+      response: {
+        code: 'PASSWORD_CHANGE_REQUIRED'
+      }
+    });
   });
 });

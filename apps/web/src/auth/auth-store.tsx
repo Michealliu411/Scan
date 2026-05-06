@@ -1,5 +1,5 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
-import { setSessionExpiredHandler } from '../api/client';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { apiFetch, setSessionExpiredHandler } from '../api/client';
 import { AuthSession } from './auth-types';
 
 const rememberedUsernameKey = 'scan:lastUsername';
@@ -8,6 +8,7 @@ const sessionExpiredMessage = '登录状态已失效，请重新登录';
 
 type AuthContextValue = {
   session: AuthSession | null;
+  isCheckingSession: boolean;
   sessionExpiredNotice: string | null;
   setSession: (session: AuthSession) => void;
   clearSession: (notice?: string | null) => void;
@@ -21,20 +22,54 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSessionState] = useState<AuthSession | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null);
 
-  const value = useMemo<AuthContextValue>(() => {
-    const clearSession = (notice: string | null = null) => {
-      setSessionState(null);
-      setSessionExpiredNotice(notice);
-    };
+  const clearSession = (notice: string | null = null) => {
+    setSessionState(null);
+    setSessionExpiredNotice(notice);
+  };
 
+  useEffect(() => {
     setSessionExpiredHandler(() => {
       clearSession(sessionExpiredMessage);
     });
 
+    return () => {
+      setSessionExpiredHandler(undefined);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    apiFetch<AuthSession>('/auth/me', { skipSessionExpiredHandler: true })
+      .then((serverSession) => {
+        if (isCurrent) {
+          setSessionState(serverSession);
+          setSessionExpiredNotice(null);
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setSessionState(null);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsCheckingSession(false);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  const value = useMemo<AuthContextValue>(() => {
     return {
       session,
+      isCheckingSession,
       sessionExpiredNotice,
       setSession(nextSession) {
         setSessionState(nextSession);
@@ -55,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionExpiredNotice(null);
       }
     };
-  }, [session, sessionExpiredNotice]);
+  }, [session, isCheckingSession, sessionExpiredNotice]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
