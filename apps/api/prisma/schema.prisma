@@ -1,0 +1,129 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  INSPECTOR
+  QUERY
+  ADMIN
+}
+
+enum InspectionResult {
+  QUALIFIED
+  UNQUALIFIED
+}
+
+enum SpecialBarcodeType {
+  DIRTY
+  NO_BARCODE_PRODUCT
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  username           String             @unique
+  passwordHash       String
+  role               Role
+  isActive           Boolean            @default(true)
+  mustChangePassword Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  sessions           Session[]
+  inspectionRecords  InspectionRecord[] @relation("InspectorInspectionRecords")
+}
+
+model Session {
+  id                  String         @id @default(cuid())
+  tokenHash           String         @unique
+  userId              String
+  productionLineId    String
+  createdAt           DateTime       @default(now())
+  lastSeenAt          DateTime       @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  replacedBySessionId String?
+
+  user              User           @relation(fields: [userId], references: [id])
+  productionLine    ProductionLine @relation(fields: [productionLineId], references: [id])
+  replacedBySession Session?       @relation("SessionReplacement", fields: [replacedBySessionId], references: [id])
+  replacedSessions  Session[]      @relation("SessionReplacement")
+
+  @@index([userId])
+  @@index([productionLineId])
+  @@index([expiresAt])
+}
+
+model ProductionLine {
+  id                String             @id @default(cuid())
+  code              String             @unique
+  name              String
+  isActive          Boolean            @default(true)
+  sortOrder         Int
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  sessions          Session[]
+  inspectionRecords InspectionRecord[]
+}
+
+model DefectReason {
+  id                    String                         @id @default(cuid())
+  code                  String                         @unique
+  name                  String
+  isActive              Boolean                        @default(true)
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+  specialBarcodes       SpecialBarcode[]
+  inspectionRecordLinks InspectionRecordDefectReason[]
+}
+
+model SpecialBarcode {
+  id             String             @id @default(cuid())
+  type           SpecialBarcodeType
+  barcode        String             @unique
+  vehicleModel   String?
+  partNumber     String?
+  defectReasonId String?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  defectReason DefectReason? @relation(fields: [defectReasonId], references: [id])
+
+  @@index([defectReasonId])
+}
+
+model InspectionRecord {
+  id                  String                         @id @default(cuid())
+  barcode             String
+  qualifiedBarcodeKey String?                        @unique
+  partNumber          String
+  vehicleModel        String?
+  productionLineId    String
+  inspectorId         String
+  result              InspectionResult
+  scannedAt           DateTime
+  createdAt           DateTime                       @default(now())
+  productionLine      ProductionLine                 @relation(fields: [productionLineId], references: [id])
+  inspector           User                           @relation("InspectorInspectionRecords", fields: [inspectorId], references: [id])
+  defectReasonLinks   InspectionRecordDefectReason[]
+
+  @@index([barcode])
+  @@index([productionLineId, scannedAt])
+  @@index([inspectorId])
+}
+
+model InspectionRecordDefectReason {
+  id                 String @id @default(cuid())
+  inspectionRecordId String
+  defectReasonId     String
+
+  inspectionRecord InspectionRecord @relation(fields: [inspectionRecordId], references: [id], onDelete: Cascade)
+  defectReason     DefectReason     @relation(fields: [defectReasonId], references: [id])
+
+  @@unique([inspectionRecordId, defectReasonId])
+  @@index([defectReasonId])
+}
