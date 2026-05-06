@@ -1,0 +1,97 @@
+:root {
+  color-scheme: light;
+  --color-bg: #F6F8FA;
+  --color-surface: #FFFFFF;
+  --color-accent: #2563EB;
+  --color-text: #111827;
+  --color-muted: #6B7280;
+  --color-border: #D1D5DB;
+  --color-danger: #DC2626;
+  --shadow-panel: 0 16px 40px rgb(17 24 39 / 8%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-bg: #111827;
+    --color-surface: #1F2937;
+    --color-accent: #60A5FA;
+    --color-text: #F9FAFB;
+    --color-muted: #9CA3AF;
+    --color-border: #374151;
+    --color-danger: #F87171;
+    --shadow-panel: 0 16px 40px rgb(0 0 0 / 28%);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 390px;
+  min-height: 100vh;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: Inter, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.foundation-panel {
+  display: flex;
+  width: min(100%, 420px);
+  gap: 16px;
+  align-items: flex-start;
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-panel);
+}
+
+.brand-mark {
+  display: grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: var(--color-accent);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+.status-text {
+  margin: 16px 0 0;
+  color: var(--color-muted);
+}
