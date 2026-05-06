@@ -275,6 +275,58 @@ describe('Auth session flow', () => {
     const expiredResponse = await agent.get('/auth/me').expect(401);
     expect(expiredResponse.body.code).toBe('SESSION_EXPIRED');
   });
+
+  it('enforces roles on real backend API boundaries', async () => {
+    const inspector = request.agent(app.getHttpServer());
+    const query = request.agent(app.getHttpServer());
+    const admin = request.agent(app.getHttpServer());
+
+    await inspector
+      .post('/auth/login')
+      .send({
+        username: 'inspector',
+        password: 'correct-password',
+        productionLineId
+      })
+      .expect(201);
+
+    await query
+      .post('/auth/login')
+      .send({
+        username: 'query',
+        password: 'correct-password',
+        productionLineId
+      })
+      .expect(201);
+
+    await admin
+      .post('/auth/login')
+      .send({
+        username: 'admin',
+        password: 'admin',
+        productionLineId
+      })
+      .expect(201);
+
+    await admin
+      .post('/auth/change-password')
+      .send({ currentPassword: 'admin', newPassword: 'updated-password' })
+      .expect(201);
+
+    await inspector.get('/scanning/boundary').expect(200);
+    const inspectorAnalytics = await inspector.get('/analytics/boundary').expect(403);
+    expect(inspectorAnalytics.body.code).toBe('ROLE_FORBIDDEN');
+
+    await query.get('/analytics/boundary').expect(200);
+    await query.get('/detail-query/boundary').expect(200);
+    const queryMasterData = await query.get('/master-data/boundary').expect(403);
+    expect(queryMasterData.body.code).toBe('ROLE_FORBIDDEN');
+
+    await admin.get('/scanning/boundary').expect(200);
+    await admin.get('/analytics/boundary').expect(200);
+    await admin.get('/detail-query/boundary').expect(200);
+    await admin.get('/master-data/boundary').expect(200);
+  });
 });
 
 describe('RolesGuard', () => {
