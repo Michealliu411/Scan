@@ -1,0 +1,18 @@
+{
+  "name": "scan",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @scan/web dev",
+    "dev:api": "pnpm --filter @scan/api start:dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:validate": "pnpm --filter @scan/api db:validate",
+    "db:generate": "pnpm --filter @scan/api db:generate",
+    "db:migrate": "pnpm --filter @scan/api db:migrate",
+    "db:seed": "pnpm --filter @scan/api db:seed"
+  }
+}
