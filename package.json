@@ -14,5 +14,10 @@
     "db:generate": "pnpm --filter @scan/api db:generate",
     "db:migrate": "pnpm --filter @scan/api db:migrate",
     "db:seed": "pnpm --filter @scan/api db:seed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.26.0",
+    "@typescript-eslint/eslint-plugin": "^8.32.0",
+    "@typescript-eslint/parser": "^8.32.0"
   }
 }

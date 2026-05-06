@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { ProductionLine } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type ProductionLineSummary = {
