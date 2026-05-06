@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { AuthProvider, useAuth } from './auth/auth-store';
 import { ChangePasswordPage } from './auth/ChangePasswordPage';
 import { LoginPage } from './auth/LoginPage';
+import { ProtectedRoute } from './auth/ProtectedRoute';
+import { AppShell } from './shell/AppShell';
 
 export function App() {
   return (
@@ -15,8 +17,10 @@ function AppRoutes() {
   const auth = useAuth();
   const [routeKey, setRouteKey] = useState(0);
 
+  const loginPage = <LoginPage onLoginComplete={() => setRouteKey((key) => key + 1)} />;
+
   if (!auth.session) {
-    return <LoginPage onLoginComplete={() => setRouteKey((key) => key + 1)} />;
+    return loginPage;
   }
 
   if (auth.session.user.mustChangePassword) {
@@ -24,9 +28,8 @@ function AppRoutes() {
   }
 
   return (
-    <main className="app-shell" aria-labelledby="app-title" key={routeKey}>
-      <h1 id="app-title">车间检验扫描统计系统</h1>
-      <p>该功能将在后续阶段启用</p>
-    </main>
+    <ProtectedRoute fallback={loginPage}>
+      <AppShell key={routeKey} />
+    </ProtectedRoute>
   );
 }
