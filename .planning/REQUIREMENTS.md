@@ -8,7 +8,7 @@
 ### Authentication and Session
 
 - [ ] **AUTH-01**: User can log in with username and password.
-- [ ] **AUTH-02**: User can select a production line during login.
+- [x] **AUTH-02**: User can select a production line during login.
 - [ ] **AUTH-03**: Browser stores the last successful login user and production line as defaults for the next login.
 - [ ] **AUTH-04**: User can log out and clear the active session.
 
@@ -91,9 +91,9 @@
 
 ### Platform and Data
 
-- [ ] **PLAT-01**: Backend stores users, roles, production lines, defect reasons, special barcodes, and inspection records in SQLite.
+- [x] **PLAT-01**: Backend stores users, roles, production lines, defect reasons, special barcodes, and inspection records in SQLite.
 - [x] **PLAT-02**: Backend exposes API boundaries for authentication, scanning, analytics, detail query, and master data.
-- [ ] **PLAT-03**: Backend centralizes Beijing-time date handling for scan records and analytics.
+- [x] **PLAT-03**: Backend centralizes Beijing-time date handling for scan records and analytics.
 - [ ] **PLAT-04**: Simulated scan lookup service can be replaced later by a real external API without rewriting scan submission logic.
 
 ## v2 Requirements
@@ -130,16 +130,16 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
+| AUTH-02 | Phase 1 | Complete |
 | AUTH-03 | Phase 1 | Pending |
 | AUTH-04 | Phase 1 | Pending |
 | ROLE-01 | Phase 1 | Pending |
 | ROLE-02 | Phase 1 | Pending |
 | ROLE-03 | Phase 1 | Pending |
 | ROLE-04 | Phase 1 | Pending |
-| PLAT-01 | Phase 1 | Pending |
+| PLAT-01 | Phase 1 | Complete |
 | PLAT-02 | Phase 1 | Complete |
-| PLAT-03 | Phase 1 | Pending |
+| PLAT-03 | Phase 1 | Complete |
 | SCAN-01 | Phase 2 | Pending |
 | SCAN-02 | Phase 2 | Pending |
 | SCAN-03 | Phase 2 | Pending |
