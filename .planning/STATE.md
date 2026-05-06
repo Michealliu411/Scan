@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 01
-status: Executing Phase 01
-last_updated: "2026-05-06T05:46:49Z"
+status: Phase 01 complete
+last_updated: "2026-05-06T08:28:44Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State: Workshop Inspection Scan Statistics System
@@ -24,7 +24,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-06)
 
 **Core value:** Inspection stations can quickly and reliably record scan results, enforce duplicate rules, and produce trustworthy Beijing-time daily/monthly quality statistics by workshop, production line, and part number.
-**Current focus:** Phase 01 — foundation-auth-and-data-model
+**Current focus:** Phase 01 — foundation-auth-and-data-model completed; ready for Phase 02 planning/execution.
 
 ## Current Decisions
 
@@ -45,7 +45,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 
 ## Roadmap Position
 
-1. Phase 1 - Foundation, Auth, and Data Model: In progress (3/4 plans complete)
+1. Phase 1 - Foundation, Auth, and Data Model: Complete (4/4 plans complete)
 2. Phase 2 - Inspection Scanning Core: Pending
 3. Phase 3 - Master Data Administration: Pending
 4. Phase 4 - Special Barcode Workflows: Pending
@@ -65,3 +65,4 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 - 2026-05-06: Completed Plan 01-01 with pnpm monorepo scaffold, NestJS health API, React/Vite web shell, lockfile, typecheck, and tests.
 - 2026-05-06: Completed Plan 01-02 with Prisma SQLite schema, initial migration SQL, hashed admin seed, 14 production lines, Beijing-time utilities, and production-line lookup API.
 - 2026-05-06: Completed Plan 01-03 with backend auth APIs, httpOnly cookie sessions, newest-login-wins invalidation, session/RBAC guards, password-change support, and auth e2e tests.
+- 2026-05-06: Completed Plan 01-04 with frontend login, production-line defaults, first-password-change screen, role-aware app shell, logout, and session-expired UX.
