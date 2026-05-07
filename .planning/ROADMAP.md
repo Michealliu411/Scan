@@ -59,6 +59,14 @@ This roadmap builds the system as a deployable internal Web application in six p
 
 **UI hint:** yes
 
+**Plans:**
+
+| Plan | Wave | Objective | Requirements | Status |
+|------|------|-----------|--------------|--------|
+| 02-01 | 1 | Backend scanning API and inspection record rules | SCAN-01, SCAN-03, SCAN-05, SCAN-06, SCAN-08, SCAN-09, BARC-01..05 | Complete 2026-05-07 |
+| 02-02 | 2 | Frontend inspection scanning workstation | SCAN-01..08, BARC-04 | Complete 2026-05-07 |
+| 02-03 | 3 | Cross-layer hardening and phase verification | SCAN-01..09, BARC-01..05 | Complete; human UAT pending 2026-05-07 |
+
 ### Phase 3: Master Data Administration
 
 **Goal:** Give administrators complete control over users, defect reasons, and production lines while preserving historical record integrity.
