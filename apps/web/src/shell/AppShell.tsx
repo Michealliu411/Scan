@@ -1,8 +1,10 @@
 import { LogOut } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth-store';
 import { Button } from '../components/Button';
+import { MasterDataPage } from '../master-data/MasterDataPage';
+import { QueryAnalysisPage } from '../query/QueryAnalysisPage';
 import { InspectionScanningPage } from '../scanning/InspectionScanningPage';
 import { getAllowedModules, ModuleKey, RoleNav } from './RoleNav';
 
@@ -11,6 +13,14 @@ const roleLabels = {
   QUERY: '查询用户',
   ADMIN: '管理员'
 };
+
+type ThemePreference = 'light' | 'dark';
+
+const themePreferenceKey = 'scan.theme';
+const themeOptions: Array<{ value: ThemePreference; label: string }> = [
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' }
+];
 
 export function AppShell() {
   const auth = useAuth();
@@ -21,6 +31,12 @@ export function AppShell() {
   );
   const [activeModule, setActiveModule] = useState<ModuleKey>(() => allowedModules[0]?.key ?? 'inspection');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(themePreferenceKey, theme);
+  }, [theme]);
 
   if (!session) {
     return null;
@@ -62,15 +78,39 @@ export function AppShell() {
             <span>{roleLabels[session.user.role]}</span>
             <span>{session.productionLine.name}</span>
           </div>
-          <Button type="button" variant="ghost" loading={isLoggingOut} loadingLabel="退出登录" onClick={handleLogout}>
-            <LogOut size={16} strokeWidth={2} aria-hidden="true" />
-            退出登录
-          </Button>
+          <div className="app-topbar__actions">
+            <div className="segmented-control" aria-label="主题">
+              {themeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={[
+                    'segmented-control__button',
+                    theme === option.value ? 'segmented-control__button--active' : ''
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  aria-pressed={theme === option.value}
+                  onClick={() => setTheme(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Button type="button" variant="ghost" loading={isLoggingOut} loadingLabel="退出登录" onClick={handleLogout}>
+              <LogOut size={16} strokeWidth={2} aria-hidden="true" />
+              退出登录
+            </Button>
+          </div>
         </header>
 
         <main className="app-content" aria-labelledby="module-title">
           {activeModuleDefinition.key === 'inspection' ? (
             <InspectionScanningPage />
+          ) : activeModuleDefinition.key === 'masterData' ? (
+            <MasterDataPage />
+          ) : activeModuleDefinition.key === 'query' ? (
+            <QueryAnalysisPage />
           ) : (
             <section className="module-placeholder">
               <h1 id="module-title">{activeModuleDefinition.label}</h1>
@@ -81,4 +121,13 @@ export function AppShell() {
       </div>
     </div>
   );
+}
+
+function readThemePreference(): ThemePreference {
+  if (typeof window === 'undefined') {
+    return 'light';
+  }
+
+  const stored = window.localStorage.getItem(themePreferenceKey);
+  return stored === 'dark' || stored === 'light' ? stored : 'light';
 }

@@ -1,18 +1,25 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionGuard } from '../auth/session.guard';
+import { AnalyticsService } from './analytics.service';
 
 @Controller('analytics')
 @UseGuards(SessionGuard, RolesGuard)
 export class AnalyticsController {
-  @Get('boundary')
+  constructor(private readonly analytics: AnalyticsService) {}
+
+  @Get('dashboard')
   @Roles(Role.QUERY, Role.ADMIN)
-  boundary(): { module: 'analytics'; status: 'ready' } {
-    return {
-      module: 'analytics',
-      status: 'ready'
-    };
+  dashboard(
+    @Query()
+    query: {
+      year?: string;
+      month?: string;
+      productionLineId?: string;
+    }
+  ) {
+    return this.analytics.getDashboard(query);
   }
 }

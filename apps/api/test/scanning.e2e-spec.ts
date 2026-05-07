@@ -1,5 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { InspectionResult, Role } from '@prisma/client';
+import { InspectionResult, Role, SpecialBarcodeType } from '@prisma/client';
 import argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import { execFileSync } from 'node:child_process';
@@ -52,6 +52,7 @@ describe('Scanning API', () => {
     await prisma.session.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
+    await prisma.specialBarcode.deleteMany();
     await prisma.defectReason.deleteMany();
     await prisma.user.deleteMany();
     await prisma.productionLine.deleteMany();
@@ -86,8 +87,8 @@ describe('Scanning API', () => {
       }),
       prisma.defectReason.create({
         data: {
-          code: 'DIRTY',
-          name: '污损',
+          code: 'BARCODE_DAMAGED',
+          name: '条码污损',
           isActive: true
         }
       })
@@ -373,5 +374,72 @@ describe('Scanning API', () => {
     const response = await query.post('/scanning/lookup').send({ barcode: 'ABC123' }).expect(403);
 
     expect(response.body.code).toBe('ROLE_FORBIDDEN');
+  });
+
+  it('auto-submits dirty special barcodes as unqualified with 条码污损', async () => {
+    const inspector = await login('inspector');
+    await prisma.specialBarcode.create({
+      data: {
+        type: SpecialBarcodeType.DIRTY,
+        barcode: '22222222-2222-4222-8222-222222222222',
+        defectReasonId: dirtyReasonId,
+        isActive: true
+      }
+    });
+
+    const response = await inspector
+      .post('/scanning/lookup')
+      .send({ barcode: '22222222-2222-4222-8222-222222222222' })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      kind: 'DIRTY_BARCODE_AUTO_SUBMITTED',
+      record: {
+        barcode: '22222222-2222-4222-8222-222222222222',
+        result: InspectionResult.UNQUALIFIED,
+        partNumber: 'DIRTY-BARCODE',
+        defectReasons: [
+          {
+            code: 'BARCODE_DAMAGED',
+            name: '条码污损'
+          }
+        ]
+      }
+    });
+
+    await expect(
+      prisma.inspectionRecord.count({
+        where: {
+          barcode: '22222222-2222-4222-8222-222222222222',
+          result: InspectionResult.UNQUALIFIED
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('resolves no-barcode product configs without calling the simulated lookup', async () => {
+    const inspector = await login('inspector');
+    await prisma.specialBarcode.create({
+      data: {
+        type: SpecialBarcodeType.NO_BARCODE_PRODUCT,
+        barcode: '33333333-3333-4333-8333-333333333333',
+        vehicleModel: '车型-无条码',
+        partNumber: 'PN-NO-BARCODE',
+        isActive: true
+      }
+    });
+
+    const response = await inspector
+      .post('/scanning/lookup')
+      .send({ barcode: '33333333-3333-4333-8333-333333333333' })
+      .expect(201);
+
+    expect(response.body).toEqual({
+      kind: 'RESOLVED_PART',
+      barcode: '33333333-3333-4333-8333-333333333333',
+      partNumber: 'PN-NO-BARCODE',
+      vehicleModel: '车型-无条码',
+      source: 'NO_BARCODE_PRODUCT'
+    });
   });
 });

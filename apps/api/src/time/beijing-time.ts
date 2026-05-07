@@ -8,7 +8,7 @@ const BUSINESS_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
   day: '2-digit'
 });
 
-type BusinessRange = {
+export type BusinessRange = {
   startUtc: Date;
   endUtc: Date;
 };
@@ -35,6 +35,24 @@ export function getBeijingDayRange(date: Date): BusinessRange {
   const endUtc = fromBeijingDateTimeToUtc(year, month, day + 1);
 
   return { startUtc, endUtc };
+}
+
+export function getBeijingDateRange(startDate: string, endDate: string): BusinessRange {
+  const start = parseBeijingDateString(startDate);
+  const end = parseBeijingDateString(endDate);
+  assertRealBeijingDate(startDate, start);
+  assertRealBeijingDate(endDate, end);
+
+  const startUtc = fromBeijingDateTimeToUtc(start.year, start.month, start.day);
+  const endUtc = fromBeijingDateTimeToUtc(end.year, end.month, end.day + 1);
+  assertValidBusinessRange(startUtc, endUtc);
+
+  return { startUtc, endUtc };
+}
+
+export function getCurrentBeijingYearMonth(date: Date = new Date()): { year: number; month: number } {
+  const { year, month } = parseBeijingDateString(toBeijingDateString(date));
+  return { year, month };
 }
 
 export function getBeijingMonthRange(year: number, month: number): BusinessRange {
@@ -79,7 +97,7 @@ function parseBeijingDateString(dateString: string): { year: number; month: numb
   const match = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$/.exec(dateString);
 
   if (!match?.groups) {
-    throw new Error(`Invalid Beijing date string: ${dateString}`);
+    throw new TypeError(`Invalid Beijing date string: ${dateString}`);
   }
 
   return {
@@ -87,6 +105,19 @@ function parseBeijingDateString(dateString: string): { year: number; month: numb
     month: Number(match.groups.month),
     day: Number(match.groups.day)
   };
+}
+
+function assertRealBeijingDate(
+  dateString: string,
+  parts: { year: number; month: number; day: number }
+): void {
+  const normalized = toBeijingDateString(
+    fromBeijingDateTimeToUtc(parts.year, parts.month, parts.day)
+  );
+
+  if (normalized !== dateString) {
+    throw new TypeError(`Invalid Beijing date string: ${dateString}`);
+  }
 }
 
 function assertValidDate(date: Date, name: string): void {

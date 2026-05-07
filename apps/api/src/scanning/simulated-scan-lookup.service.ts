@@ -1,13 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-
-export type ScanLookupResult = {
-  barcode: string;
-  partNumber: string;
-  vehicleModel: string;
-};
+import { ScanLookupGateway, ScanLookupResult } from './scan-lookup.gateway';
 
 @Injectable()
-export class ScanLookupService {
+export class SimulatedScanLookupService implements ScanLookupGateway {
   async lookup(barcode: string): Promise<ScanLookupResult> {
     const trimmedBarcode = barcode.trim();
 

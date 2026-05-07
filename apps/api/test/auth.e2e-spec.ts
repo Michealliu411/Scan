@@ -314,17 +314,17 @@ describe('Auth session flow', () => {
       .expect(201);
 
     await inspector.get('/scanning/boundary').expect(200);
-    const inspectorAnalytics = await inspector.get('/analytics/boundary').expect(403);
+    const inspectorAnalytics = await inspector.get('/analytics/dashboard').expect(403);
     expect(inspectorAnalytics.body.code).toBe('ROLE_FORBIDDEN');
 
-    await query.get('/analytics/boundary').expect(200);
-    await query.get('/detail-query/boundary').expect(200);
+    await query.get('/analytics/dashboard').expect(200);
+    await query.get('/detail-query/records').expect(200);
     const queryMasterData = await query.get('/master-data/boundary').expect(403);
     expect(queryMasterData.body.code).toBe('ROLE_FORBIDDEN');
 
     await admin.get('/scanning/boundary').expect(200);
-    await admin.get('/analytics/boundary').expect(200);
-    await admin.get('/detail-query/boundary').expect(200);
+    await admin.get('/analytics/dashboard').expect(200);
+    await admin.get('/detail-query/records').expect(200);
     await admin.get('/master-data/boundary').expect(200);
   });
 });

@@ -20,9 +20,16 @@ import {
 type LookupStatus = 'idle' | 'loading' | 'success' | 'error';
 type SubmitStatus = 'idle' | 'submitting' | 'success' | 'error';
 type InspectionMode = 'neutral' | 'unqualified';
+type ScanLayoutPreset = 'standard' | 'details-first' | 'actions-first';
 
 const lookupFailureMessage = '未找到零件信息，请修改后重试或重新扫描';
 const duplicateQualifiedMessage = '该条码已存在合格记录，不能重复提交';
+const workstationLayoutKey = 'scan.workstationLayout';
+const scanLayoutPresets: Array<{ value: ScanLayoutPreset; label: string }> = [
+  { value: 'standard', label: '标准' },
+  { value: 'details-first', label: '明细优先' },
+  { value: 'actions-first', label: '操作优先' }
+];
 
 export function InspectionScanningPage() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -34,15 +41,21 @@ export function InspectionScanningPage() {
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [duplicateQualified, setDuplicateQualified] = useState<DuplicateQualifiedDetails | null>(null);
   const [defectReasons, setDefectReasons] = useState<DefectReasonOption[]>([]);
   const [todayRecords, setTodayRecords] = useState<InspectionDetailRecord[]>([]);
+  const [layoutPreset, setLayoutPreset] = useState<ScanLayoutPreset>(() => readScanLayoutPreset());
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
     void loadDefectReasons();
     void loadTodayRecords();
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(workstationLayoutKey, layoutPreset);
+  }, [layoutPreset]);
 
   async function loadDefectReasons() {
     try {
@@ -68,6 +81,7 @@ export function InspectionScanningPage() {
       setLookupError(null);
       setSubmitStatus('idle');
       setSubmitError(null);
+      setSuccessMessage(null);
       setDuplicateQualified(null);
       setMode('neutral');
       setSelectedDefectReasonIds([]);
@@ -83,12 +97,30 @@ export function InspectionScanningPage() {
     setLookupStatus('loading');
     setLookupError(null);
     setSubmitError(null);
+    setSuccessMessage(null);
     setDuplicateQualified(null);
     setSubmitStatus('idle');
 
     try {
       const result = await lookupBarcode(trimmedBarcode);
-      setResolvedPart(result);
+      if (result.kind === 'DIRTY_BARCODE_AUTO_SUBMITTED') {
+        setSubmitStatus('success');
+        setSuccessMessage('条码污损记录已自动提交');
+        setBarcode('');
+        setResolvedPart(null);
+        setLookupStatus('idle');
+        setMode('neutral');
+        setSelectedDefectReasonIds([]);
+        await loadTodayRecords();
+        barcodeInputRef.current?.focus();
+        return;
+      }
+
+      setResolvedPart({
+        barcode: result.barcode,
+        partNumber: result.partNumber,
+        vehicleModel: result.vehicleModel
+      });
       setBarcode(result.barcode);
       setLookupStatus('success');
     } catch (error) {
@@ -117,6 +149,7 @@ export function InspectionScanningPage() {
 
     setSubmitStatus('submitting');
     setSubmitError(null);
+    setSuccessMessage(null);
     setDuplicateQualified(null);
 
     try {
@@ -128,6 +161,7 @@ export function InspectionScanningPage() {
         ...(result === 'UNQUALIFIED' ? { defectReasonIds: selectedDefectReasonIds } : {})
       });
       setSubmitStatus('success');
+      setSuccessMessage('检验记录已提交');
       setBarcode('');
       setResolvedPart(null);
       setLookupStatus('idle');
@@ -167,10 +201,30 @@ export function InspectionScanningPage() {
 
   return (
     <div className="scan-page">
-      <h1 id="module-title">检验扫描</h1>
+      <div className="scan-page__header">
+        <h1 id="module-title">检验扫描</h1>
+        <div className="segmented-control" aria-label="扫描布局">
+          {scanLayoutPresets.map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              className={[
+                'segmented-control__button',
+                layoutPreset === preset.value ? 'segmented-control__button--active' : ''
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-pressed={layoutPreset === preset.value}
+              onClick={() => setLayoutPreset(preset.value)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <div className="scan-workstation">
-        <div className="scan-workstation__left">
+      <div className={`scan-workstation scan-workstation--${layoutPreset}`}>
+        <div className="scan-workstation__item scan-workstation__item--input">
           <section className="scan-panel" aria-labelledby="scan-input-title">
             <div className="scan-panel__header">
               <h2 id="scan-input-title">条码解析</h2>
@@ -206,7 +260,9 @@ export function InspectionScanningPage() {
               ) : null}
             </form>
           </section>
+        </div>
 
+        <div className="scan-workstation__item scan-workstation__item--actions">
           <section className="scan-actions" aria-labelledby="scan-actions-title">
             <div className="scan-panel__header">
               <h2 id="scan-actions-title">检验操作</h2>
@@ -274,7 +330,7 @@ export function InspectionScanningPage() {
               </div>
             ) : null}
 
-            {submitStatus === 'success' ? <Alert variant="success">检验记录已提交</Alert> : null}
+            {submitStatus === 'success' && successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
             {submitError ? (
               <Alert variant="error">
                 <div>{submitError}</div>
@@ -290,7 +346,7 @@ export function InspectionScanningPage() {
           </section>
         </div>
 
-        <section className="scan-details" aria-labelledby="scan-details-title">
+        <section className="scan-details scan-workstation__item scan-workstation__item--details" aria-labelledby="scan-details-title">
           <div className="scan-panel__header">
             <h2 id="scan-details-title">今日检验明细</h2>
           </div>
@@ -326,6 +382,15 @@ export function InspectionScanningPage() {
       </div>
     </div>
   );
+}
+
+function readScanLayoutPreset(): ScanLayoutPreset {
+  if (typeof window === 'undefined') {
+    return 'standard';
+  }
+
+  const stored = window.localStorage.getItem(workstationLayoutKey);
+  return stored === 'details-first' || stored === 'actions-first' || stored === 'standard' ? stored : 'standard';
 }
 
 function extractUnknownMessage(error: unknown, fallback: string): string {

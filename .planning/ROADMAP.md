@@ -16,7 +16,7 @@ This roadmap builds the system as a deployable internal Web application in six p
 | 3 | Master Data Administration | Implement user, role, password reset, defect reason, and production-line administration with reference protection. | MSTR-01..08 |
 | 4 | Special Barcode Workflows | Implement dirty-barcode and no-barcode product configuration, UUID preview/save, auto-unqualified submission, and local part-number matching. | SPEC-01..07 |
 | 5 | Query Analysis and Dashboard | Implement ECharts monthly dashboard and detail query with filters using Beijing-time month/date boundaries. | DASH-01..07, QRY-01..07 |
-| 6 | Layout, Theming, Integration Boundary, and UAT Polish | Finalize light/dark mode, role-aware navigation, panel swapping, scanner ergonomics, and real API replacement boundary. | SCAN-10, UI-01..05, PLAT-04 |
+| 6 | Layout, Theming, Integration Boundary, and UAT Polish | Finalize light/dark mode, role-aware navigation, panel swapping, scanner ergonomics, dashboard full-screen viewing, and real API replacement boundary. | SCAN-10, UI-01..05, DASH-08, PLAT-04 |
 
 ## Phase Details
 
@@ -65,7 +65,7 @@ This roadmap builds the system as a deployable internal Web application in six p
 |------|------|-----------|--------------|--------|
 | 02-01 | 1 | Backend scanning API and inspection record rules | SCAN-01, SCAN-03, SCAN-05, SCAN-06, SCAN-08, SCAN-09, BARC-01..05 | Complete 2026-05-07 |
 | 02-02 | 2 | Frontend inspection scanning workstation | SCAN-01..08, BARC-04 | Complete 2026-05-07 |
-| 02-03 | 3 | Cross-layer hardening and phase verification | SCAN-01..09, BARC-01..05 | Complete; human UAT pending 2026-05-07 |
+| 02-03 | 3 | Cross-layer hardening and phase verification | SCAN-01..09, BARC-01..05 | Complete; human UAT carried forward 2026-05-07 |
 
 ### Phase 3: Master Data Administration
 
@@ -82,6 +82,14 @@ This roadmap builds the system as a deployable internal Web application in six p
 
 **UI hint:** yes
 
+**Plans:**
+
+| Plan | Wave | Objective | Requirements | Status |
+|------|------|-----------|--------------|--------|
+| 03-01 | 1 | Backend master data API and integrity rules | MSTR-01..08 | Complete 2026-05-07 |
+| 03-02 | 2 | Frontend master data administration workspace | MSTR-01..08 | Complete 2026-05-07 |
+| 03-03 | 3 | Cross-layer verification and phase closure | MSTR-01..08 | Complete 2026-05-07 |
+
 ### Phase 4: Special Barcode Workflows
 
 **Goal:** Support real workshop exceptions where dirty or missing product barcodes still need statistically correct inspection records.
@@ -96,6 +104,14 @@ This roadmap builds the system as a deployable internal Web application in six p
 5. Special barcode flows obey the same duplicate/rework rules as normal scan submissions.
 
 **UI hint:** yes
+
+**Plans:**
+
+| Plan | Wave | Objective | Requirements | Status |
+|------|------|-----------|--------------|--------|
+| 04-01 | 1 | Backend special barcode APIs and scan matching | SPEC-01..07 | Complete 2026-05-07 |
+| 04-02 | 2 | Frontend special barcode management and scan responses | SPEC-01..07 | Complete 2026-05-07 |
+| 04-03 | 3 | Cross-layer verification and phase closure | SPEC-01..07 | Complete 2026-05-07 |
 
 ### Phase 5: Query Analysis and Dashboard
 
@@ -113,28 +129,45 @@ This roadmap builds the system as a deployable internal Web application in six p
 
 **UI hint:** yes
 
+**Plans:**
+
+| Plan | Wave | Objective | Requirements | Status |
+|------|------|-----------|--------------|--------|
+| 05-01 | 1 | Backend analytics and detail query APIs | DASH-02, DASH-03, DASH-06, DASH-07, QRY-01..07 | Complete 2026-05-07 |
+| 05-02 | 2 | Frontend query analysis workspace | DASH-01..05, DASH-07, QRY-01..07 | Complete 2026-05-07 |
+| 05-03 | 3 | Cross-layer verification and phase closure | DASH-01..07, QRY-01..07 | Complete 2026-05-07 |
+
 ### Phase 6: Layout, Theming, Integration Boundary, and UAT Polish
 
 **Goal:** Finish the operator experience and prepare the codebase for real plant integration after v1.
 
-**Requirements:** SCAN-10, UI-01, UI-02, UI-03, UI-04, UI-05, PLAT-04
+**Requirements:** SCAN-10, UI-01, UI-02, UI-03, UI-04, UI-05, DASH-08, PLAT-04
 
 **Success Criteria:**
 1. The scanning page supports swapping the three panel positions and persists the preferred layout locally.
 2. Every screen supports light and dark modes with persisted preference.
 3. Navigation exposes only role-allowed modules.
 4. Scan screen keyboard flow is fast enough for scanner-first work without mouse dependency for normal qualified scans.
-5. The simulated scan lookup is isolated behind a service interface that can be replaced by a real API implementation.
+5. The dashboard can be expanded for full-screen workshop review and exited with Escape.
+6. The simulated scan lookup is isolated behind a service interface that can be replaced by a real API implementation.
 
 **UI hint:** yes
 
+**Plans:**
+
+| Plan | Wave | Objective | Requirements | Status |
+|------|------|-----------|--------------|--------|
+| 06-01 | 1 | Theme persistence and role navigation polish | UI-02, UI-03, UI-04 | Complete 2026-05-07 |
+| 06-02 | 2 | Scanner layout preference and ergonomics | SCAN-10, UI-05 | Complete 2026-05-07 |
+| 06-03 | 3 | Lookup boundary, UAT, and requirement sync | UI-01, PLAT-04, SCAN-01..09, BARC-01..05 | Complete 2026-05-07 |
+
 ## Coverage
 
-All 61 v1 requirements are mapped to exactly one phase.
+All 62 v1 requirements are mapped to exactly one phase.
 
 ## Next Step
 
-Run `$gsd-discuss-phase 1` to clarify implementation approach for the foundation phase, or `$gsd-ui-phase 1` first if you want a UI contract before planning.
+Phase 06 is complete. v1 is ready for final review/ship.
 
 ---
 *Roadmap created: 2026-05-06*

@@ -31,9 +31,11 @@ describe('InspectionScanningPage', () => {
     fetchDefectReasonsMock.mockResolvedValue(defectReasons);
     fetchTodayRecordsMock.mockResolvedValue([]);
     lookupBarcodeMock.mockResolvedValue({
+      kind: 'RESOLVED_PART',
       barcode: 'ABC123456',
       partNumber: 'PN-123456',
-      vehicleModel: '车型-ABC1'
+      vehicleModel: '车型-ABC1',
+      source: 'SIMULATED_LOOKUP'
     });
     submitInspectionRecordMock.mockResolvedValue({
       id: 'record-1',
@@ -181,6 +183,68 @@ describe('InspectionScanningPage', () => {
     expect(within(details).getByText('车型-DEF')).toBeTruthy();
     expect(within(details).getByText('不合格')).toBeTruthy();
     expect(within(details).getByText('划伤、污损')).toBeTruthy();
+  });
+
+  it('dirty special barcode lookup auto-submits and refreshes today records', async () => {
+    lookupBarcodeMock.mockResolvedValueOnce({
+      kind: 'DIRTY_BARCODE_AUTO_SUBMITTED',
+      record: {
+        id: 'record-dirty',
+        barcode: '22222222-2222-4222-8222-222222222222',
+        partNumber: 'DIRTY-BARCODE',
+        vehicleModel: null,
+        result: 'UNQUALIFIED',
+        scannedAt: '2026-05-07T01:02:03.000Z',
+        defectReasons: ['条码污损']
+      }
+    });
+
+    render(<InspectionScanningPage />);
+
+    fireEvent.change(screen.getByLabelText('条码'), {
+      target: { value: '22222222-2222-4222-8222-222222222222' }
+    });
+    fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
+
+    expect(await screen.findByText('条码污损记录已自动提交')).toBeTruthy();
+    await waitFor(() => {
+      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(2);
+      expect(screen.getByLabelText('条码')).toHaveProperty('value', '');
+    });
+    expect(submitInspectionRecordMock).not.toHaveBeenCalled();
+  });
+
+  it('persists the selected scan panel layout', async () => {
+    const { unmount } = render(<InspectionScanningPage />);
+
+    await waitFor(() => {
+      expect(fetchDefectReasonsMock).toHaveBeenCalled();
+      expect(fetchTodayRecordsMock).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByRole('button', { name: '明细优先' }));
+
+    expect(window.localStorage.getItem('scan.workstationLayout')).toBe('details-first');
+    expect(screen.getByRole('button', { name: '明细优先' }).getAttribute('aria-pressed')).toBe('true');
+
+    unmount();
+    render(<InspectionScanningPage />);
+
+    expect(screen.getByRole('button', { name: '明细优先' }).getAttribute('aria-pressed')).toBe('true');
+    await waitFor(() => {
+      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('focuses the barcode input after a successful qualified submission', async () => {
+    render(<InspectionScanningPage />);
+
+    await resolveBarcode();
+    fireEvent.click(screen.getByRole('button', { name: '合格' }));
+
+    expect(await screen.findByText('检验记录已提交')).toBeTruthy();
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText('条码'));
+    });
   });
 });
 

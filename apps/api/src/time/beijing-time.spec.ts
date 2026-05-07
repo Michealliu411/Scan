@@ -1,6 +1,7 @@
 import {
   assertValidBusinessRange,
   BEIJING_TIME_ZONE,
+  getBeijingDateRange,
   getBeijingDayRange,
   getBeijingMonthRange,
   toBeijingDateString
@@ -27,6 +28,21 @@ describe('beijing-time utilities', () => {
 
     expect(range.startUtc.toISOString()).toBe('2026-04-30T16:00:00.000Z');
     expect(range.endUtc.toISOString()).toBe('2026-05-31T16:00:00.000Z');
+  });
+
+  it('returns inclusive UTC boundaries for Beijing detail query date ranges', () => {
+    const range = getBeijingDateRange('2026-05-01', '2026-05-31');
+
+    expect(range.startUtc.toISOString()).toBe('2026-04-30T16:00:00.000Z');
+    expect(range.endUtc.toISOString()).toBe('2026-05-31T16:00:00.000Z');
+  });
+
+  it('rejects malformed Beijing detail query date strings', () => {
+    expect(() => getBeijingDateRange('2026/05/01', '2026-05-31')).toThrow(TypeError);
+  });
+
+  it('rejects Beijing detail query date ranges where start is after end', () => {
+    expect(() => getBeijingDateRange('2026-05-31', '2026-05-01')).toThrow(RangeError);
   });
 
   it('rejects invalid business ranges', () => {

@@ -25,8 +25,8 @@ export class ScanningController {
 
   @Post('lookup')
   @Roles(Role.INSPECTOR, Role.ADMIN)
-  lookup(@Body() dto: LookupBarcodeDto) {
-    return this.scanning.lookupBarcode(dto.barcode);
+  lookup(@CurrentUser() auth: ActiveSessionContext, @Body() dto: LookupBarcodeDto) {
+    return this.scanning.lookupBarcode(auth, dto.barcode);
   }
 
   @Get('defect-reasons')

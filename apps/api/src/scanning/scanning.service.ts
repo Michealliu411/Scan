@@ -1,10 +1,10 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { InspectionResult, Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
+import { InspectionResult, Prisma, SpecialBarcodeType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActiveSessionContext } from '../sessions/sessions.service';
 import { getBeijingDayRange, nowUtc } from '../time/beijing-time';
 import { CreateInspectionRecordDto } from './dto/create-inspection-record.dto';
-import { ScanLookupService } from './scan-lookup.service';
+import { SCAN_LOOKUP_GATEWAY, ScanLookupGateway } from './scan-lookup.gateway';
 
 type InspectionRecordWithDetails = Prisma.InspectionRecordGetPayload<{
   include: {
@@ -22,11 +22,61 @@ type InspectionRecordWithDetails = Prisma.InspectionRecordGetPayload<{
 export class ScanningService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly scanLookup: ScanLookupService
+    @Inject(SCAN_LOOKUP_GATEWAY)
+    private readonly scanLookup: ScanLookupGateway
   ) {}
 
-  lookupBarcode(barcode: string) {
-    return this.scanLookup.lookup(barcode);
+  async lookupBarcode(auth: ActiveSessionContext, barcode: string) {
+    const trimmedBarcode = barcode.trim();
+    const specialBarcode = await this.prisma.specialBarcode.findUnique({
+      where: { barcode: trimmedBarcode },
+      include: { defectReason: true }
+    });
+
+    if (specialBarcode?.isActive && specialBarcode.type === SpecialBarcodeType.DIRTY) {
+      if (!specialBarcode.defectReasonId) {
+        throw new BadRequestException({
+          code: 'DIRTY_BARCODE_REASON_REQUIRED',
+          message: '条码污损配置缺少缺陷原因'
+        });
+      }
+
+      const record = await this.createUnqualifiedRecord(auth, {
+        barcode: trimmedBarcode,
+        partNumber: 'DIRTY-BARCODE',
+        vehicleModel: null,
+        defectReasonIds: [specialBarcode.defectReasonId]
+      });
+
+      return {
+        kind: 'DIRTY_BARCODE_AUTO_SUBMITTED',
+        record
+      };
+    }
+
+    if (specialBarcode?.isActive && specialBarcode.type === SpecialBarcodeType.NO_BARCODE_PRODUCT) {
+      if (!specialBarcode.partNumber || !specialBarcode.vehicleModel) {
+        throw new BadRequestException({
+          code: 'NO_BARCODE_PRODUCT_INFO_REQUIRED',
+          message: '无条码产品配置缺少车型或零件号'
+        });
+      }
+
+      return {
+        kind: 'RESOLVED_PART',
+        barcode: trimmedBarcode,
+        partNumber: specialBarcode.partNumber,
+        vehicleModel: specialBarcode.vehicleModel,
+        source: 'NO_BARCODE_PRODUCT'
+      };
+    }
+
+    const result = await this.scanLookup.lookup(trimmedBarcode);
+    return {
+      kind: 'RESOLVED_PART',
+      ...result,
+      source: 'SIMULATED_LOOKUP'
+    };
   }
 
   async listActiveDefectReasons() {
