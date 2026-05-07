@@ -1,11 +1,14 @@
-import { InputHTMLAttributes, useId } from 'react';
+import { forwardRef, InputHTMLAttributes, useId } from 'react';
 
 type TextInputProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   error?: string;
 };
 
-export function TextInput({ label, error, id, className, ...props }: TextInputProps) {
+export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
+  { label, error, id, className, ...props },
+  ref
+) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const errorId = `${inputId}-error`;
@@ -18,6 +21,7 @@ export function TextInput({ label, error, id, className, ...props }: TextInputPr
         className={['text-input', error ? 'text-input--error' : '', className].filter(Boolean).join(' ')}
         aria-invalid={Boolean(error)}
         aria-describedby={error ? errorId : undefined}
+        ref={ref}
         {...props}
       />
       {error ? (
@@ -27,4 +31,4 @@ export function TextInput({ label, error, id, className, ...props }: TextInputPr
       ) : null}
     </label>
   );
-}
+});

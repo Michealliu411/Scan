@@ -346,6 +346,218 @@ h1 {
   color: var(--color-muted);
 }
 
+.scan-page {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.scan-workstation {
+  display: grid;
+  grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.scan-workstation__left {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.scan-panel,
+.scan-actions,
+.scan-details {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.scan-panel__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.scan-panel__body {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.scan-resolved {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  border-radius: var(--radius-control);
+}
+
+.scan-resolved__label,
+.defect-reasons__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.scan-resolved__caption,
+.scan-resolved__barcode,
+.scan-detail-row__meta,
+.scan-detail-row__reasons,
+.scan-detail-row__time,
+.scan-empty p,
+.duplicate-details {
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.scan-part-number {
+  overflow-wrap: anywhere;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.scan-vehicle-model {
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.scan-action-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.scan-action-buttons .button {
+  width: 100%;
+  min-width: 0;
+}
+
+.button--selected {
+  color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--color-accent) 44%, var(--color-border));
+}
+
+.defect-reasons {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.defect-reasons__grid {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.defect-reason {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.defect-reason--selected {
+  color: var(--color-accent);
+  background: var(--color-info-bg);
+  border-color: color-mix(in srgb, var(--color-accent) 36%, var(--color-border));
+}
+
+.duplicate-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.scan-details {
+  min-width: 0;
+}
+
+.scan-detail-list {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.scan-detail-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: var(--space-md);
+  align-items: start;
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.scan-detail-row:first-child {
+  border-top: 0;
+}
+
+.scan-detail-row__main {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-xs);
+}
+
+.scan-detail-row__barcode {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.scan-detail-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.result-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.result-badge--qualified {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.result-badge--unqualified {
+  color: var(--color-danger);
+  background: var(--color-error-bg);
+}
+
+.scan-empty {
+  display: grid;
+  gap: var(--space-xs);
+  padding-block: var(--space-xl);
+  text-align: center;
+}
+
+.scan-empty__title {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.scan-empty p {
+  margin: 0;
+}
+
 @media (max-width: 767px) {
   .app-layout {
     grid-template-columns: 1fr;
@@ -360,5 +572,18 @@ h1 {
     align-items: flex-start;
     flex-direction: column;
     padding-block: var(--space-md);
+  }
+
+  .app-content {
+    padding: var(--space-lg);
+  }
+
+  .scan-workstation {
+    grid-template-columns: 1fr;
+  }
+
+  .scan-action-buttons,
+  .scan-detail-row {
+    grid-template-columns: 1fr;
   }
 }

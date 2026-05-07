@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/auth-store';
 import { Button } from '../components/Button';
+import { InspectionScanningPage } from '../scanning/InspectionScanningPage';
 import { getAllowedModules, ModuleKey, RoleNav } from './RoleNav';
 
 const roleLabels = {
@@ -68,10 +69,14 @@ export function AppShell() {
         </header>
 
         <main className="app-content" aria-labelledby="module-title">
-          <section className="module-placeholder">
-            <h1 id="module-title">{activeModuleDefinition.label}</h1>
-            <p>该功能将在后续阶段启用</p>
-          </section>
+          {activeModuleDefinition.key === 'inspection' ? (
+            <InspectionScanningPage />
+          ) : (
+            <section className="module-placeholder">
+              <h1 id="module-title">{activeModuleDefinition.label}</h1>
+              <p>该功能将在后续阶段启用</p>
+            </section>
+          )}
         </main>
       </div>
     </div>
