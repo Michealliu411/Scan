@@ -6,11 +6,14 @@ import { SessionGuard } from '../auth/session.guard';
 import {
   CreateDefectReasonDto,
   CreateManagedUserDto,
+  CreateOperatorProfileDto,
   CreateProductionLineDto,
   CreateSpecialBarcodeDto,
+  ImportOperatorProfilesDto,
   ResetManagedUserPasswordDto,
   UpdateDefectReasonDto,
   UpdateManagedUserDto,
+  UpdateOperatorProfileDto,
   UpdateProductionLineDto,
   UpdateSpecialBarcodeDto
 } from './dto/master-data.dto';
@@ -78,6 +81,32 @@ export class MasterDataController {
   @Delete('defect-reasons/:id')
   async deleteDefectReason(@Param('id') id: string): Promise<{ ok: true }> {
     await this.masterData.deleteDefectReason(id);
+    return { ok: true };
+  }
+
+  @Get('operators')
+  operators() {
+    return this.masterData.listOperatorProfiles();
+  }
+
+  @Post('operators')
+  createOperator(@Body() dto: CreateOperatorProfileDto) {
+    return this.masterData.createOperatorProfile(dto);
+  }
+
+  @Post('operators/import')
+  importOperators(@Body() dto: ImportOperatorProfilesDto) {
+    return this.masterData.importOperatorProfiles(dto);
+  }
+
+  @Patch('operators/:id')
+  updateOperator(@Param('id') id: string, @Body() dto: UpdateOperatorProfileDto) {
+    return this.masterData.updateOperatorProfile(id, dto);
+  }
+
+  @Delete('operators/:id')
+  async deleteOperator(@Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteOperatorProfile(id);
     return { ok: true };
   }
 

@@ -53,6 +53,11 @@ describe('Auth session flow', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const operatorMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');

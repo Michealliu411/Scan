@@ -23,6 +23,11 @@ enum SpecialBarcodeType {
   NO_BARCODE_PRODUCT
 }
 
+enum OperatorEmploymentType {
+  FORMAL
+  LABOR
+}
+
 model User {
   id                 String             @id @default(cuid())
   username           String             @unique
@@ -34,6 +39,7 @@ model User {
   updatedAt          DateTime           @updatedAt
   sessions           Session[]
   inspectionRecords  InspectionRecord[] @relation("InspectorInspectionRecords")
+  changeLogs         InspectionRecordChangeLog[] @relation("InspectionRecordChangeOperator")
 }
 
 model Session {
@@ -73,11 +79,28 @@ model DefectReason {
   id                    String                         @id @default(cuid())
   code                  String                         @unique
   name                  String
+  deductionAmount       Decimal                        @default(0)
   isActive              Boolean                        @default(true)
   createdAt             DateTime                       @default(now())
   updatedAt             DateTime                       @updatedAt
   specialBarcodes       SpecialBarcode[]
   inspectionRecordLinks InspectionRecordDefectReason[]
+}
+
+model OperatorProfile {
+  id                  String                 @id @default(cuid())
+  employeeCode        String?                @unique
+  name                String
+  pinyinInitials      String
+  employmentType      OperatorEmploymentType
+  isActive            Boolean                @default(true)
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  inspectionRecords   InspectionRecord[]
+
+  @@index([name])
+  @@index([pinyinInitials])
+  @@index([employmentType])
 }
 
 model SpecialBarcode {
@@ -104,16 +127,42 @@ model InspectionRecord {
   vehicleModel        String?
   productionLineId    String
   inspectorId         String
+  operatorProfileId   String?
   result              InspectionResult
+  deductionAmount     Decimal                        @default(0)
   scannedAt           DateTime
   createdAt           DateTime                       @default(now())
   productionLine      ProductionLine                 @relation(fields: [productionLineId], references: [id])
   inspector           User                           @relation("InspectorInspectionRecords", fields: [inspectorId], references: [id])
+  operatorProfile     OperatorProfile?               @relation(fields: [operatorProfileId], references: [id])
   defectReasonLinks   InspectionRecordDefectReason[]
+  changeLogs          InspectionRecordChangeLog[]
 
   @@index([barcode])
   @@index([productionLineId, scannedAt])
   @@index([inspectorId])
+  @@index([operatorProfileId])
+}
+
+model InspectionRecordChangeLog {
+  id                 String           @id @default(cuid())
+  inspectionRecordId String
+  operatorId         String
+  barcode            String
+  partNumber         String
+  previousResult     InspectionResult
+  newResult          InspectionResult
+  defectReasonsJson  String
+  operatedAt         DateTime         @default(now())
+  createdAt          DateTime         @default(now())
+
+  inspectionRecord InspectionRecord @relation(fields: [inspectionRecordId], references: [id])
+  operator         User             @relation("InspectionRecordChangeOperator", fields: [operatorId], references: [id])
+
+  @@index([inspectionRecordId])
+  @@index([operatorId])
+  @@index([operatedAt])
+  @@index([barcode])
 }
 
 model InspectionRecordDefectReason {

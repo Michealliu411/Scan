@@ -21,7 +21,7 @@
 
 ### Inspection Scanning
 
-- [x] **SCAN-01**: Inspector can scan or type a barcode and press Enter to resolve part information through the simulated scan lookup service.
+- [x] **SCAN-01**: Inspector can scan or type a barcode and resolve part information through the scan lookup boundary.
 - [x] **SCAN-02**: Scan input panel shows resolved product or part information clearly before submission.
 - [x] **SCAN-03**: Inspector can click Qualified to immediately submit a qualified inspection record.
 - [x] **SCAN-04**: Inspector can click Unqualified to reveal active defect reasons with none selected by default.
@@ -48,7 +48,7 @@
 - [x] **SPEC-04**: Administrator can create, view, update, disable, and delete unreferenced no-barcode product configurations.
 - [x] **SPEC-05**: System generates no-barcode product barcode values in UUID format and supports preview before saving.
 - [x] **SPEC-06**: No-barcode product configuration stores vehicle model and part number.
-- [x] **SPEC-07**: When a scanned barcode matches an active no-barcode product configuration, the system uses the configured part number and does not call the simulated scan API.
+- [x] **SPEC-07**: When a scanned barcode matches an active no-barcode product configuration, the system uses the configured part number and does not call the external lookup API.
 
 ### Dashboard Analytics
 
@@ -97,6 +97,24 @@
 - [x] **PLAT-03**: Backend centralizes Beijing-time date handling for scan records and analytics.
 - [x] **PLAT-04**: Simulated scan lookup service can be replaced later by a real external API without rewriting scan submission logic.
 
+## Post-v1 Implemented Adjustments
+
+- [x] **ADJ-01**: Normal resolved scans auto-submit as qualified records.
+- [x] **ADJ-02**: Unqualified scans require entering unqualified mode, preselecting defect reasons, then manually submitting after scan resolution.
+- [x] **ADJ-03**: Qualified barcodes are terminal for normal barcodes; after qualification they cannot be recorded again as qualified or unqualified.
+- [x] **ADJ-04**: Active special barcodes can still be recorded repeatedly according to their configured exception workflow.
+- [x] **ADJ-05**: Dashboard total output and unqualified metrics count distinct barcodes rather than repeated records.
+- [x] **ADJ-06**: Query users and administrators can reclassify qualified records to unqualified with auditable operation logs.
+- [x] **ADJ-07**: Administrators can edit safe master-data fields, toggle active state for defect reasons and production lines, and users can change their own passwords.
+- [x] **ADJ-08**: Normal scans call the configurable real water-wash-label lookup interface through `SCAN_LOOKUP_URL`.
+- [x] **TRIAL-01**: Inspection operation buttons are larger, equal-sized, and constrained within the operation panel.
+- [x] **TRIAL-02**: Detail and operation-log query date filters default to the current Beijing date.
+- [x] **TRIAL-03**: Query analysis views support Excel-only export for dashboard, detail records, and operation logs.
+- [x] **TRIAL-04**: Administrators can manage independent operator profiles, separated from login users, including formal-worker and labor-worker types.
+- [x] **TRIAL-05**: Operator profiles can be imported from Excel.
+- [x] **TRIAL-06**: Unqualified inspection supports operator selection by name, employee code, or pinyin initials without case sensitivity.
+- [x] **TRIAL-07**: Defect codes support deduction amounts, and unqualified inspection accumulates selected-code deduction totals.
+
 ## v2 Requirements
 
 ### Shift Scheduling
@@ -107,7 +125,7 @@
 
 ### Real Integration
 
-- **INTG-01**: Backend can call the real plant barcode lookup API.
+- [x] **INTG-01**: Backend can call the real plant barcode lookup API.
 - **INTG-02**: Backend can record external API errors and retry or fallback according to plant rules.
 
 ### Reporting Enhancements
@@ -121,7 +139,6 @@
 | Feature | Reason |
 |---------|--------|
 | Formal shift management in v1 | User explicitly deferred shifts; v1 uses Beijing natural day. |
-| Real scan API integration in v1 | User selected simulated API first to complete the system loop. |
 | Cloud deployment | Target deployment is an internal network server. |
 | Mobile app | Current workflow targets browser-based scan stations. |
 | ERP/MES write-back | Not requested for v1 and would require external interface details. |
@@ -200,4 +217,4 @@
 
 ---
 *Requirements defined: 2026-05-06*
-*Last updated: 2026-05-07 after dashboard full-screen polish*
+*Last updated: 2026-05-18 after post-v1 status alignment*

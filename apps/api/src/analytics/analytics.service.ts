@@ -45,10 +45,12 @@ export class AnalyticsService {
           ...(productionLineId ? { productionLineId } : {})
         },
         select: {
+          barcode: true,
           partNumber: true,
           productionLineId: true,
           result: true
-        }
+        },
+        orderBy: { scannedAt: 'asc' }
       })
     ]);
 
@@ -114,24 +116,25 @@ export class AnalyticsService {
     }
   }
 
-  private countTotals(records: Array<{ result: InspectionResult }>): Totals {
-    return records.reduce<Totals>(
-      (totals, record) => ({
-        total: totals.total + 1,
-        qualified: totals.qualified + (record.result === InspectionResult.QUALIFIED ? 1 : 0),
-        unqualified: totals.unqualified + (record.result === InspectionResult.UNQUALIFIED ? 1 : 0)
-      }),
-      { total: 0, qualified: 0, unqualified: 0 }
-    );
+  private countTotals(records: Array<{ barcode: string; result: InspectionResult }>): Totals {
+    return {
+      total: this.countDistinctBarcodes(records),
+      qualified: this.countDistinctBarcodes(
+        records.filter((record) => record.result === InspectionResult.QUALIFIED)
+      ),
+      unqualified: this.countDistinctBarcodes(
+        records.filter((record) => record.result === InspectionResult.UNQUALIFIED)
+      )
+    };
   }
 
   private countByPart<TCountKey extends 'total' | 'unqualified'>(
-    records: Array<{ partNumber: string }>,
+    records: Array<{ barcode: string; partNumber: string }>,
     countKey: TCountKey
   ): Array<{ partNumber: string } & Record<TCountKey, number>> {
     const counts = new Map<string, number>();
 
-    for (const record of records) {
+    for (const record of this.distinctRecordsByBarcode(records)) {
       counts.set(record.partNumber, (counts.get(record.partNumber) ?? 0) + 1);
     }
 
@@ -141,5 +144,21 @@ export class AnalyticsService {
         partNumber,
         [countKey]: count
       })) as Array<{ partNumber: string } & Record<TCountKey, number>>;
+  }
+
+  private countDistinctBarcodes(records: Array<{ barcode: string }>): number {
+    return new Set(records.map((record) => record.barcode)).size;
+  }
+
+  private distinctRecordsByBarcode<TRecord extends { barcode: string }>(records: TRecord[]): TRecord[] {
+    const byBarcode = new Map<string, TRecord>();
+
+    for (const record of records) {
+      if (!byBarcode.has(record.barcode)) {
+        byBarcode.set(record.barcode, record);
+      }
+    }
+
+    return [...byBarcode.values()];
   }
 }

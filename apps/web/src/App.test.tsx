@@ -40,4 +40,17 @@ describe('App', () => {
     expect(await screen.findByText('admin')).toBeTruthy();
     expect(screen.getByText('一号产线')).toBeTruthy();
   });
+
+  it('ignores an invalid auth/me payload instead of crashing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(new Response('<!doctype html><div id="root"></div>'))
+        .mockResolvedValueOnce(new Response(JSON.stringify([]), { headers: { 'Content-Type': 'application/json' } }))
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText('请选择产线并登录')).toBeTruthy();
+  });
 });

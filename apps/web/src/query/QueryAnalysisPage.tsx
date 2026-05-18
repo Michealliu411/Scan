@@ -1,5 +1,5 @@
 import * as echarts from 'echarts';
-import { BarChart3, Maximize2, Minimize2, Search } from 'lucide-react';
+import { BarChart3, Download, Maximize2, Minimize2, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
@@ -7,21 +7,25 @@ import { Select } from '../components/Select';
 import { TextInput } from '../components/TextInput';
 import {
   fetchDashboard,
+  fetchInspectionRecordChangeLogs,
   fetchDetailRecords,
   fetchQueryDefectReasons,
-  fetchQueryProductionLines
+  fetchQueryProductionLines,
+  reclassifyInspectionRecord
 } from './query-api';
 import {
+  ChangeLogFilters,
   DashboardFilters,
   DashboardResponse,
   DefectReasonOption,
   DetailQueryFilters,
   DetailRecord,
+  InspectionRecordChangeLog,
   InspectionResult,
   ProductionLineOption
 } from './query-types';
 
-type QueryTab = 'dashboard' | 'details';
+type QueryTab = 'dashboard' | 'details' | 'logs';
 
 const resultLabels: Record<InspectionResult, string> = {
   QUALIFIED: '合格',
@@ -37,8 +41,8 @@ export function QueryAnalysisPage() {
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [detailFilters, setDetailFilters] = useState<DetailQueryFilters>({
-    startDate: '',
-    endDate: '',
+    startDate: getTodayDateInputValue(),
+    endDate: getTodayDateInputValue(),
     productionLineId: '',
     barcode: '',
     partNumber: '',
@@ -48,6 +52,15 @@ export function QueryAnalysisPage() {
   const [detailRecords, setDetailRecords] = useState<DetailRecord[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [changeLogFilters, setChangeLogFilters] = useState<ChangeLogFilters>({
+    startDate: getTodayDateInputValue(),
+    endDate: getTodayDateInputValue(),
+    barcode: '',
+    operatorUsername: ''
+  });
+  const [changeLogs, setChangeLogs] = useState<InspectionRecordChangeLog[]>([]);
+  const [changeLogLoading, setChangeLogLoading] = useState(false);
+  const [changeLogError, setChangeLogError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +134,31 @@ export function QueryAnalysisPage() {
     }
   }
 
+  async function handleChangeLogSearch() {
+    setChangeLogLoading(true);
+    setChangeLogError(null);
+
+    try {
+      const response = await fetchInspectionRecordChangeLogs(changeLogFilters);
+      setChangeLogs(response.logs);
+    } catch {
+      setChangeLogError('操作记录查询失败，请检查筛选条件后重试');
+    } finally {
+      setChangeLogLoading(false);
+    }
+  }
+
+  async function handleReclassify(recordId: string, defectReasonIds: string[]) {
+    setDetailError(null);
+
+    try {
+      await reclassifyInspectionRecord(recordId, defectReasonIds);
+      await handleDetailSearch();
+    } catch {
+      setDetailError('变更为不合格失败，请确认记录状态和缺陷原因');
+    }
+  }
+
   return (
     <section className="query-page" aria-labelledby="module-title">
       <header className="query-header">
@@ -149,6 +187,15 @@ export function QueryAnalysisPage() {
         >
           明细查询
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'logs'}
+          className={['master-tabs__button', activeTab === 'logs' ? 'master-tabs__button--active' : ''].filter(Boolean).join(' ')}
+          onClick={() => setActiveTab('logs')}
+        >
+          操作记录
+        </button>
       </div>
 
       {activeTab === 'dashboard' ? (
@@ -161,8 +208,9 @@ export function QueryAnalysisPage() {
           onProductionLineChange={(productionLineId) =>
             setDashboardFilters(productionLineId ? { productionLineId } : {})
           }
+          onExport={() => exportDashboard(dashboard)}
         />
-      ) : (
+      ) : activeTab === 'details' ? (
         <DetailQueryTab
           defectReasons={defectReasons}
           detailError={detailError}
@@ -172,6 +220,18 @@ export function QueryAnalysisPage() {
           productionLines={productionLines}
           onFilterChange={setDetailFilters}
           onSearch={handleDetailSearch}
+          onExport={() => exportDetailRecords(detailRecords)}
+          onReclassify={handleReclassify}
+        />
+      ) : (
+        <ChangeLogTab
+          changeLogError={changeLogError}
+          changeLogFilters={changeLogFilters}
+          changeLogLoading={changeLogLoading}
+          changeLogs={changeLogs}
+          onFilterChange={setChangeLogFilters}
+          onSearch={handleChangeLogSearch}
+          onExport={() => exportChangeLogs(changeLogs)}
         />
       )}
     </section>
@@ -184,7 +244,8 @@ function DashboardTab({
   dashboardLoading,
   productionLines,
   selectedProductionLineId,
-  onProductionLineChange
+  onProductionLineChange,
+  onExport
 }: {
   dashboard: DashboardResponse | null;
   dashboardError: string | null;
@@ -192,6 +253,7 @@ function DashboardTab({
   productionLines: ProductionLineOption[];
   selectedProductionLineId: string;
   onProductionLineChange: (productionLineId: string) => void;
+  onExport: () => void;
 }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const productChartOption = useMemo(
@@ -217,6 +279,45 @@ function DashboardTab({
         {
           type: 'bar',
           data: dashboard?.unqualifiedPartDistribution.map((item) => item.unqualified) ?? []
+        }
+      ]
+    }),
+    [dashboard]
+  );
+  const productionLineChartOption = useMemo(
+    (): echarts.EChartsOption => ({
+      tooltip: { trigger: 'axis' },
+      legend: {
+        data: ['总产出', '合格数', '不合格数'],
+        bottom: 0
+      },
+      grid: {
+        left: 40,
+        right: 20,
+        top: 52,
+        bottom: 64,
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: dashboard?.productionLineTotals.map((line) => line.productionLineCode) ?? []
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          name: '总产出',
+          type: 'bar',
+          data: dashboard?.productionLineTotals.map((line) => line.total) ?? []
+        },
+        {
+          name: '合格数',
+          type: 'bar',
+          data: dashboard?.productionLineTotals.map((line) => line.qualified) ?? []
+        },
+        {
+          name: '不合格数',
+          type: 'bar',
+          data: dashboard?.productionLineTotals.map((line) => line.unqualified) ?? []
         }
       ]
     }),
@@ -253,7 +354,10 @@ function DashboardTab({
 
   return (
     <section
-      className={['query-section', isFullscreen ? 'query-section--fullscreen' : ''].filter(Boolean).join(' ')}
+      className={[
+        'query-section',
+        isFullscreen ? 'query-section--fullscreen query-section--fullscreen-fit' : ''
+      ].filter(Boolean).join(' ')}
       aria-label="统计看板内容"
     >
       <div className="query-toolbar">
@@ -271,6 +375,15 @@ function DashboardTab({
               </option>
             ))}
           </Select>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!dashboard}
+            onClick={onExport}
+          >
+            <Download size={16} strokeWidth={2} aria-hidden="true" />
+            导出Excel
+          </Button>
           <Button
             type="button"
             variant="secondary"
@@ -296,37 +409,12 @@ function DashboardTab({
         <KpiTile label="不合格数" value={dashboard?.workshopTotals.unqualified ?? 0} />
       </div>
 
-      <div className="master-table-wrap">
-        <table className="master-table" aria-label="产线月度统计">
-          <thead>
-            <tr>
-              <th>产线</th>
-              <th>总产出</th>
-              <th>合格数</th>
-              <th>不合格数</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dashboard?.productionLineTotals.length ? (
-              dashboard.productionLineTotals.map((line) => (
-                <tr key={line.productionLineId}>
-                  <td>
-                    <strong>{line.productionLineCode}</strong>
-                    <span className="table-subtext">{line.productionLineName}</span>
-                  </td>
-                  <td>{line.total}</td>
-                  <td>{line.qualified}</td>
-                  <td>{line.unqualified}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={4}>本月暂无数据</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <ChartPanel
+        title="产线统计"
+        empty={!dashboard?.productionLineTotals.length}
+        option={productionLineChartOption}
+        size="wide"
+      />
 
       <div className="query-chart-grid">
         <ChartPanel
@@ -352,7 +440,9 @@ function DetailQueryTab({
   detailRecords,
   productionLines,
   onFilterChange,
-  onSearch
+  onSearch,
+  onExport,
+  onReclassify
 }: {
   defectReasons: DefectReasonOption[];
   detailError: string | null;
@@ -362,9 +452,43 @@ function DetailQueryTab({
   productionLines: ProductionLineOption[];
   onFilterChange: (filters: DetailQueryFilters) => void;
   onSearch: () => void;
+  onExport: () => void;
+  onReclassify: (recordId: string, defectReasonIds: string[]) => Promise<void>;
 }) {
+  const [reclassifyRecord, setReclassifyRecord] = useState<DetailRecord | null>(null);
+  const [reclassifyReasonIds, setReclassifyReasonIds] = useState<string[]>([]);
+  const [isReclassifying, setIsReclassifying] = useState(false);
+
   function updateFilter(key: keyof DetailQueryFilters, value: string) {
     onFilterChange({ ...detailFilters, [key]: value });
+  }
+
+  function openReclassifyDialog(record: DetailRecord) {
+    setReclassifyRecord(record);
+    setReclassifyReasonIds([]);
+  }
+
+  function toggleReclassifyReason(reasonId: string) {
+    setReclassifyReasonIds((current) =>
+      current.includes(reasonId)
+        ? current.filter((candidate) => candidate !== reasonId)
+        : [...current, reasonId]
+    );
+  }
+
+  async function submitReclassification() {
+    if (!reclassifyRecord || !reclassifyReasonIds.length) {
+      return;
+    }
+
+    setIsReclassifying(true);
+    try {
+      await onReclassify(reclassifyRecord.id, reclassifyReasonIds);
+      setReclassifyRecord(null);
+      setReclassifyReasonIds([]);
+    } finally {
+      setIsReclassifying(false);
+    }
   }
 
   return (
@@ -438,6 +562,10 @@ function DetailQueryTab({
             <Search size={16} strokeWidth={2} aria-hidden="true" />
             查询
           </Button>
+          <Button type="button" variant="secondary" disabled={!detailRecords.length} onClick={onExport}>
+            <Download size={16} strokeWidth={2} aria-hidden="true" />
+            导出Excel
+          </Button>
         </div>
       </form>
 
@@ -452,7 +580,10 @@ function DetailQueryTab({
               <th>零件号</th>
               <th>结果</th>
               <th>缺陷原因</th>
+              <th>操作工</th>
+              <th>扣款金额</th>
               <th>检验员</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -466,12 +597,175 @@ function DetailQueryTab({
                   <td className="query-breakable">{record.partNumber}</td>
                   <td>{resultLabels[record.result]}</td>
                   <td>{record.defectReasons.map((reason) => reason.name).join('、') || '-'}</td>
+                  <td>{record.operatorProfile?.name ?? '-'}</td>
+                  <td>{(record.deductionAmount ?? 0).toFixed(2)}</td>
                   <td>{record.inspector.username}</td>
+                  <td>
+                    {record.result === 'QUALIFIED' ? (
+                      <Button type="button" variant="secondary" onClick={() => openReclassifyDialog(record)}>
+                        变更为不合格
+                      </Button>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={8}>没有符合条件的记录</td>
+                <td colSpan={11}>没有符合条件的记录</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {reclassifyRecord ? (
+        <div className="modal-backdrop">
+          <div
+            className="form-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`变更为不合格：${reclassifyRecord.barcode}`}
+          >
+            <h2>变更为不合格</h2>
+            <p className="muted-text">{reclassifyRecord.barcode} · {reclassifyRecord.partNumber}</p>
+            <div className="defect-reasons">
+              <div className="defect-reasons__title">选择缺陷原因</div>
+              <div className="defect-reasons__grid">
+                {defectReasons.map((reason) => (
+                  <label
+                    key={reason.id}
+                    className={[
+                      'defect-reason',
+                      reclassifyReasonIds.includes(reason.id) ? 'defect-reason--selected' : ''
+                    ].filter(Boolean).join(' ')}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={reclassifyReasonIds.includes(reason.id)}
+                      onChange={() => toggleReclassifyReason(reason.id)}
+                    />
+                    <span>{reason.code} {reason.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-actions">
+              <Button type="button" variant="secondary" disabled={isReclassifying} onClick={() => setReclassifyRecord(null)}>
+                取消
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={!reclassifyReasonIds.length || isReclassifying}
+                loading={isReclassifying}
+                loadingLabel="变更中..."
+                onClick={() => void submitReclassification()}
+              >
+                确认变更
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ChangeLogTab({
+  changeLogError,
+  changeLogFilters,
+  changeLogLoading,
+  changeLogs,
+  onFilterChange,
+  onSearch,
+  onExport
+}: {
+  changeLogError: string | null;
+  changeLogFilters: ChangeLogFilters;
+  changeLogLoading: boolean;
+  changeLogs: InspectionRecordChangeLog[];
+  onFilterChange: (filters: ChangeLogFilters) => void;
+  onSearch: () => void;
+  onExport: () => void;
+}) {
+  function updateFilter(key: keyof ChangeLogFilters, value: string) {
+    onFilterChange({ ...changeLogFilters, [key]: value });
+  }
+
+  return (
+    <section className="query-section" aria-label="操作记录内容">
+      {changeLogError ? <Alert variant="error">{changeLogError}</Alert> : null}
+
+      <form
+        className="query-filter-grid"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSearch();
+        }}
+      >
+        <TextInput
+          label="开始日期"
+          type="date"
+          value={changeLogFilters.startDate ?? ''}
+          onChange={(event) => updateFilter('startDate', event.target.value)}
+        />
+        <TextInput
+          label="结束日期"
+          type="date"
+          value={changeLogFilters.endDate ?? ''}
+          onChange={(event) => updateFilter('endDate', event.target.value)}
+        />
+        <TextInput
+          label="条码"
+          value={changeLogFilters.barcode ?? ''}
+          onChange={(event) => updateFilter('barcode', event.target.value)}
+        />
+        <TextInput
+          label="操作人"
+          value={changeLogFilters.operatorUsername ?? ''}
+          onChange={(event) => updateFilter('operatorUsername', event.target.value)}
+        />
+        <div className="query-filter-actions">
+          <Button type="submit" loading={changeLogLoading} loadingLabel="查询中...">
+            <Search size={16} strokeWidth={2} aria-hidden="true" />
+            查询操作记录
+          </Button>
+          <Button type="button" variant="secondary" disabled={!changeLogs.length} onClick={onExport}>
+            <Download size={16} strokeWidth={2} aria-hidden="true" />
+            导出Excel
+          </Button>
+        </div>
+      </form>
+
+      <div className="master-table-wrap">
+        <table className="master-table query-detail-table" aria-label="操作记录查询结果">
+          <thead>
+            <tr>
+              <th>操作时间</th>
+              <th>条码</th>
+              <th>零件号</th>
+              <th>变更</th>
+              <th>缺陷原因</th>
+              <th>操作人</th>
+            </tr>
+          </thead>
+          <tbody>
+            {changeLogs.length ? (
+              changeLogs.map((log) => (
+                <tr key={log.id}>
+                  <td>{formatScanTime(log.operatedAt)}</td>
+                  <td className="query-breakable">{log.barcode}</td>
+                  <td className="query-breakable">{log.partNumber}</td>
+                  <td>{resultLabels[log.previousResult]} -&gt; {resultLabels[log.newResult]}</td>
+                  <td>{log.defectReasons.map((reason) => reason.name).join('、') || '-'}</td>
+                  <td>{log.operator.username}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6}>没有符合条件的操作记录</td>
               </tr>
             )}
           </tbody>
@@ -493,11 +787,13 @@ function KpiTile({ label, value }: { label: string; value: number }) {
 function ChartPanel({
   title,
   empty,
-  option
+  option,
+  size = 'standard'
 }: {
   title: string;
   empty: boolean;
   option: echarts.EChartsOption;
+  size?: 'standard' | 'wide';
 }) {
   const chartRef = useRef<HTMLDivElement | null>(null);
 
@@ -519,7 +815,7 @@ function ChartPanel({
   }, [option]);
 
   return (
-    <section className="query-chart" aria-label={title}>
+    <section className={['query-chart', size === 'wide' ? 'query-chart--wide' : ''].filter(Boolean).join(' ')} aria-label={title}>
       <header className="query-chart__header">
         <h2>{title}</h2>
         <BarChart3 size={18} strokeWidth={2} aria-hidden="true" />
@@ -541,4 +837,90 @@ function formatScanTime(value: string): string {
     hour12: false,
     timeZone: 'Asia/Shanghai'
   }).format(new Date(value));
+}
+
+function getTodayDateInputValue(): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date());
+
+  const year = parts.find((part) => part.type === 'year')?.value ?? '';
+  const month = parts.find((part) => part.type === 'month')?.value ?? '';
+  const day = parts.find((part) => part.type === 'day')?.value ?? '';
+  return `${year}-${month}-${day}`;
+}
+
+async function exportDashboard(dashboard: DashboardResponse | null) {
+  if (!dashboard) {
+    return;
+  }
+
+  await writeWorkbook(`统计看板-${dashboard.period.year}-${String(dashboard.period.month).padStart(2, '0')}.xlsx`, {
+    月度指标: [
+      { 指标: '总产出', 数量: dashboard.workshopTotals.total },
+      { 指标: '合格数', 数量: dashboard.workshopTotals.qualified },
+      { 指标: '不合格数', 数量: dashboard.workshopTotals.unqualified }
+    ],
+    产线统计: dashboard.productionLineTotals.map((line) => ({
+      产线编码: line.productionLineCode,
+      产线名称: line.productionLineName,
+      总产出: line.total,
+      合格数: line.qualified,
+      不合格数: line.unqualified
+    })),
+    产品分布: dashboard.productDistribution.map((item) => ({
+      零件号: item.partNumber,
+      数量: item.total
+    })),
+    不合格零件分布: dashboard.unqualifiedPartDistribution.map((item) => ({
+      零件号: item.partNumber,
+      不合格数: item.unqualified
+    }))
+  });
+}
+
+async function exportDetailRecords(records: DetailRecord[]) {
+  await writeWorkbook('检验明细.xlsx', {
+    检验明细: records.map((record) => ({
+      扫码时间: formatScanTime(record.scannedAt),
+      产线: record.productionLine.name,
+      条码: record.barcode,
+      车型: record.vehicleModel ?? '',
+      零件号: record.partNumber,
+      结果: resultLabels[record.result],
+      缺陷原因: record.defectReasons.map((reason) => `${reason.code} ${reason.name}`).join('、'),
+      操作工: record.operatorProfile?.name ?? '',
+      操作工类型: record.operatorProfile?.employmentType === 'LABOR' ? '劳务工' : record.operatorProfile ? '正式工' : '',
+      扣款金额: record.deductionAmount ?? 0,
+      检验员: record.inspector.username
+    }))
+  });
+}
+
+async function exportChangeLogs(logs: InspectionRecordChangeLog[]) {
+  await writeWorkbook('操作记录.xlsx', {
+    操作记录: logs.map((log) => ({
+      操作时间: formatScanTime(log.operatedAt),
+      条码: log.barcode,
+      零件号: log.partNumber,
+      变更: `${resultLabels[log.previousResult]} -> ${resultLabels[log.newResult]}`,
+      缺陷原因: log.defectReasons.map((reason) => `${reason.code} ${reason.name}`).join('、'),
+      操作人: log.operator.username
+    }))
+  });
+}
+
+async function writeWorkbook(fileName: string, sheets: Record<string, Array<Record<string, string | number>>>) {
+  const XLSX = await import('xlsx');
+  const workbook = XLSX.utils.book_new();
+
+  for (const [sheetName, rows] of Object.entries(sheets)) {
+    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{}]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  }
+
+  XLSX.writeFile(workbook, fileName, { bookType: 'xlsx' });
 }

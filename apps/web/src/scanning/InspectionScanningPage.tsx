@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, extractApiMessage } from '../api/client';
 import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
@@ -7,6 +7,7 @@ import {
   fetchDefectReasons,
   fetchTodayRecords,
   lookupBarcode,
+  searchOperators,
   submitInspectionRecord
 } from './scanning-api';
 import {
@@ -14,6 +15,7 @@ import {
   DuplicateQualifiedDetails,
   InspectionDetailRecord,
   InspectionResult,
+  OperatorOption,
   ResolvedPart
 } from './scanning-types';
 
@@ -38,6 +40,9 @@ export function InspectionScanningPage() {
   const [resolvedPart, setResolvedPart] = useState<ResolvedPart | null>(null);
   const [mode, setMode] = useState<InspectionMode>('neutral');
   const [selectedDefectReasonIds, setSelectedDefectReasonIds] = useState<string[]>([]);
+  const [operatorSearch, setOperatorSearch] = useState('');
+  const [operatorOptions, setOperatorOptions] = useState<OperatorOption[]>([]);
+  const [selectedOperator, setSelectedOperator] = useState<OperatorOption | null>(null);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -57,6 +62,21 @@ export function InspectionScanningPage() {
     window.localStorage.setItem(workstationLayoutKey, layoutPreset);
   }, [layoutPreset]);
 
+  useEffect(() => {
+    if (mode !== 'unqualified' || operatorSearch.trim().length < 1) {
+      setOperatorOptions([]);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      void loadOperatorOptions(operatorSearch);
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [mode, operatorSearch]);
+
   async function loadDefectReasons() {
     try {
       setDefectReasons(await fetchDefectReasons());
@@ -73,19 +93,40 @@ export function InspectionScanningPage() {
     }
   }
 
+  async function loadOperatorOptions(query: string) {
+    try {
+      setOperatorOptions(await searchOperators(query));
+    } catch (error) {
+      setSubmitError(extractUnknownMessage(error, '操作工检索失败'));
+    }
+  }
+
   function handleBarcodeChange(nextBarcode: string) {
     setBarcode(nextBarcode);
     if (resolvedPart) {
-      setResolvedPart(null);
-      setLookupStatus('idle');
-      setLookupError(null);
-      setSubmitStatus('idle');
-      setSubmitError(null);
-      setSuccessMessage(null);
-      setDuplicateQualified(null);
-      setMode('neutral');
-      setSelectedDefectReasonIds([]);
+      resetScanState();
     }
+  }
+
+  function handleClearScan() {
+    setBarcode('');
+    resetScanState();
+    barcodeInputRef.current?.focus();
+  }
+
+  function resetScanState() {
+    setResolvedPart(null);
+    setLookupStatus('idle');
+    setLookupError(null);
+    setSubmitStatus('idle');
+    setSubmitError(null);
+    setSuccessMessage(null);
+    setDuplicateQualified(null);
+    setMode('neutral');
+    setSelectedDefectReasonIds([]);
+    setOperatorSearch('');
+    setOperatorOptions([]);
+    setSelectedOperator(null);
   }
 
   async function handleLookup() {
@@ -123,6 +164,16 @@ export function InspectionScanningPage() {
       });
       setBarcode(result.barcode);
       setLookupStatus('success');
+      if (mode !== 'unqualified') {
+        await submitResolvedPart(
+          {
+            barcode: result.barcode,
+            partNumber: result.partNumber,
+            vehicleModel: result.vehicleModel
+          },
+          'QUALIFIED'
+        );
+      }
     } catch (error) {
       setResolvedPart(null);
       setLookupStatus('error');
@@ -142,6 +193,10 @@ export function InspectionScanningPage() {
       return;
     }
 
+    await submitResolvedPart(resolvedPart, result);
+  }
+
+  async function submitResolvedPart(part: ResolvedPart, result: InspectionResult) {
     if (result === 'UNQUALIFIED' && selectedDefectReasonIds.length === 0) {
       setSubmitError('请选择至少一个缺陷原因');
       return;
@@ -154,11 +209,13 @@ export function InspectionScanningPage() {
 
     try {
       await submitInspectionRecord({
-        barcode: resolvedPart.barcode,
-        partNumber: resolvedPart.partNumber,
-        vehicleModel: resolvedPart.vehicleModel,
+        barcode: part.barcode,
+        partNumber: part.partNumber,
+        vehicleModel: part.vehicleModel,
         result,
-        ...(result === 'UNQUALIFIED' ? { defectReasonIds: selectedDefectReasonIds } : {})
+        ...(result === 'UNQUALIFIED'
+          ? { defectReasonIds: selectedDefectReasonIds, operatorProfileId: selectedOperator?.id }
+          : {})
       });
       setSubmitStatus('success');
       setSuccessMessage('检验记录已提交');
@@ -168,6 +225,9 @@ export function InspectionScanningPage() {
       setLookupError(null);
       setMode('neutral');
       setSelectedDefectReasonIds([]);
+      setOperatorSearch('');
+      setOperatorOptions([]);
+      setSelectedOperator(null);
       await loadTodayRecords();
       barcodeInputRef.current?.focus();
     } catch (error) {
@@ -197,6 +257,14 @@ export function InspectionScanningPage() {
 
   const isResolved = Boolean(resolvedPart);
   const isBusy = lookupStatus === 'loading' || submitStatus === 'submitting';
+  const selectedDeductionAmount = useMemo(
+    () =>
+      selectedDefectReasonIds.reduce((total, reasonId) => {
+        const reason = defectReasons.find((candidate) => candidate.id === reasonId);
+        return total + (reason?.deductionAmount ?? 0);
+      }, 0),
+    [defectReasons, selectedDefectReasonIds]
+  );
   const canSubmitUnqualified = mode === 'unqualified' && selectedDefectReasonIds.length > 0;
 
   return (
@@ -228,12 +296,23 @@ export function InspectionScanningPage() {
           <section className="scan-panel" aria-labelledby="scan-input-title">
             <div className="scan-panel__header">
               <h2 id="scan-input-title">条码解析</h2>
+              <Button
+                type="button"
+                variant="secondary"
+                className="scan-clear-button"
+                disabled={isBusy || (!barcode && !resolvedPart)}
+                onClick={handleClearScan}
+              >
+                清空
+              </Button>
             </div>
 
-            <form className="scan-panel__body" onSubmit={handleSubmitForm}>
+            <form className="scan-panel__body" autoComplete="off" onSubmit={handleSubmitForm}>
               <TextInput
                 ref={barcodeInputRef}
                 label="条码"
+                name="scan-barcode"
+                autoComplete="off"
                 value={barcode}
                 placeholder="扫描或输入条码后按 Enter"
                 onChange={(event) => handleBarcodeChange(event.target.value)}
@@ -263,26 +342,19 @@ export function InspectionScanningPage() {
         </div>
 
         <div className="scan-workstation__item scan-workstation__item--actions">
-          <section className="scan-actions" aria-labelledby="scan-actions-title">
+          <section className="scan-actions scan-actions--matched-input" aria-labelledby="scan-actions-title">
             <div className="scan-panel__header">
               <h2 id="scan-actions-title">检验操作</h2>
             </div>
 
-            <div className="scan-action-buttons">
-              <Button
-                type="button"
-                disabled={!isResolved || isBusy}
-                loading={submitStatus === 'submitting' && mode === 'neutral'}
-                loadingLabel="提交中"
-                onClick={() => void handleSubmit('QUALIFIED')}
-              >
-                合格
-              </Button>
+            <div className="scan-action-buttons scan-action-buttons--two-wide">
               <Button
                 type="button"
                 variant="secondary"
-                className={mode === 'unqualified' ? 'button--selected' : undefined}
-                disabled={!isResolved || isBusy}
+                className={['scan-action-button', mode === 'unqualified' ? 'button--selected' : '']
+                  .filter(Boolean)
+                  .join(' ')}
+                disabled={isBusy}
                 onClick={() => {
                   setMode('unqualified');
                   setSubmitStatus('idle');
@@ -295,6 +367,7 @@ export function InspectionScanningPage() {
               <Button
                 type="button"
                 variant="danger"
+                className="scan-action-button"
                 disabled={!isResolved || isBusy || !canSubmitUnqualified}
                 loading={submitStatus === 'submitting' && mode === 'unqualified'}
                 loadingLabel="提交中"
@@ -305,29 +378,73 @@ export function InspectionScanningPage() {
             </div>
 
             {mode === 'unqualified' ? (
-              <div className="defect-reasons">
-                <div className="defect-reasons__title">选择缺陷原因</div>
-                <div className="defect-reasons__grid">
-                  {defectReasons.map((reason) => (
-                    <label
-                      key={reason.id}
-                      className={[
-                        'defect-reason',
-                        selectedDefectReasonIds.includes(reason.id) ? 'defect-reason--selected' : ''
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDefectReasonIds.includes(reason.id)}
-                        onChange={() => toggleDefectReason(reason.id)}
-                      />
-                      <span>{reason.code} {reason.name}</span>
-                    </label>
-                  ))}
+              <>
+                <div className="operator-picker">
+                  <TextInput
+                    label="人员选择"
+                    value={operatorSearch}
+                    placeholder="输入姓名或拼音首字母"
+                    onChange={(event) => {
+                      setOperatorSearch(event.target.value);
+                      setSelectedOperator(null);
+                    }}
+                  />
+                  {selectedOperator ? (
+                    <div className="operator-picker__selected">
+                      已选 {selectedOperator.name} · {selectedOperator.employmentType === 'FORMAL' ? '正式工' : '劳务工'}
+                    </div>
+                  ) : null}
+                  {operatorOptions.length ? (
+                    <div className="operator-picker__options" role="listbox" aria-label="操作工检索结果">
+                      {operatorOptions.map((operator) => (
+                        <button
+                          key={operator.id}
+                          type="button"
+                          className="operator-picker__option"
+                          onClick={() => {
+                            setSelectedOperator(operator);
+                            setOperatorSearch(operator.name);
+                            setOperatorOptions([]);
+                            setSubmitError(null);
+                          }}
+                        >
+                          <span>{operator.name}</span>
+                          <span>{operator.pinyinInitials} · {operator.employmentType === 'FORMAL' ? '正式工' : '劳务工'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
+
+                <div className="defect-reasons">
+                  <div className="defect-reasons__title">
+                    <span>选择缺陷原因</span>
+                    <strong>扣款合计 {selectedDeductionAmount.toFixed(2)}</strong>
+                  </div>
+                  <div className="defect-reasons__grid">
+                    {defectReasons.map((reason) => (
+                      <label
+                        key={reason.id}
+                        aria-label={`${reason.code} ${reason.name}`}
+                        className={[
+                          'defect-reason',
+                          selectedDefectReasonIds.includes(reason.id) ? 'defect-reason--selected' : ''
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedDefectReasonIds.includes(reason.id)}
+                          onChange={() => toggleDefectReason(reason.id)}
+                        />
+                        <span>{reason.code} {reason.name}</span>
+                        <strong>{reason.deductionAmount ? reason.deductionAmount.toFixed(2) : '0.00'}</strong>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : null}
 
             {submitStatus === 'success' && successMessage ? <Alert variant="success">{successMessage}</Alert> : null}
@@ -365,6 +482,11 @@ export function InspectionScanningPage() {
                     <div className="scan-detail-row__reasons">
                       {record.defectReasons.length ? record.defectReasons.join('、') : '无缺陷原因'}
                     </div>
+                    {record.operatorProfile ? (
+                      <div className="scan-detail-row__operator">
+                        操作工 {record.operatorProfile.name} · 扣款 {(record.deductionAmount ?? 0).toFixed(2)}
+                      </div>
+                    ) : null}
                   </div>
                   <span className={`result-badge result-badge--${record.result.toLowerCase()}`}>
                     {record.result === 'QUALIFIED' ? '合格' : '不合格'}

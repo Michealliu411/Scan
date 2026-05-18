@@ -1,16 +1,30 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { DefectReason, Prisma, ProductionLine, Role, SpecialBarcode, SpecialBarcodeType, User } from '@prisma/client';
+import {
+  DefectReason,
+  OperatorEmploymentType,
+  OperatorProfile,
+  Prisma,
+  ProductionLine,
+  Role,
+  SpecialBarcode,
+  SpecialBarcodeType,
+  User
+} from '@prisma/client';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
+import { pinyin } from 'pinyin-pro';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDefectReasonDto,
   CreateManagedUserDto,
+  CreateOperatorProfileDto,
   CreateProductionLineDto,
   CreateSpecialBarcodeDto,
+  ImportOperatorProfilesDto,
   ResetManagedUserPasswordDto,
   UpdateDefectReasonDto,
   UpdateManagedUserDto,
+  UpdateOperatorProfileDto,
   UpdateProductionLineDto,
   UpdateSpecialBarcodeDto
 } from './dto/master-data.dto';
@@ -19,15 +33,23 @@ type ManagedUser = Omit<User, 'passwordHash'> & {
   inspectionRecordCount: number;
   sessionCount: number;
   referenced: boolean;
+  canEdit: boolean;
   canDelete: boolean;
   canResetPassword: boolean;
 };
 
-type ManagedDefectReason = DefectReason & {
+type ManagedDefectReason = Omit<DefectReason, 'deductionAmount'> & {
+  deductionAmount: number;
   inspectionRecordCount: number;
   specialBarcodeCount: number;
   referenced: boolean;
   canEdit: boolean;
+  canDelete: boolean;
+};
+
+type ManagedOperatorProfile = OperatorProfile & {
+  inspectionRecordCount: number;
+  referenced: boolean;
   canDelete: boolean;
 };
 
@@ -82,7 +104,14 @@ export class MasterDataService {
   }
 
   async updateUser(id: string, dto: UpdateManagedUserDto): Promise<ManagedUser> {
-    await this.ensureUser(id);
+    const current = await this.ensureUser(id);
+
+    if (current.username === 'admin') {
+      throw new BadRequestException({
+        code: 'ADMIN_ACCOUNT_EDIT_NOT_ALLOWED',
+        message: 'admin账户禁止编辑'
+      });
+    }
 
     const user = await this.prisma.user.update({
       where: { id },
@@ -150,6 +179,7 @@ export class MasterDataService {
       data: {
         code: dto.code.trim(),
         name: dto.name.trim(),
+        deductionAmount: dto.deductionAmount ?? 0,
         isActive: dto.isActive ?? true
       },
       include: this.defectReasonCounts
@@ -183,12 +213,124 @@ export class MasterDataService {
       data: {
         ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
         ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.deductionAmount !== undefined ? { deductionAmount: dto.deductionAmount } : {}),
         ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
       },
       include: this.defectReasonCounts
     });
 
     return this.toManagedDefectReason(updated);
+  }
+
+  async listOperatorProfiles(): Promise<ManagedOperatorProfile[]> {
+    const operators = await this.prisma.operatorProfile.findMany({
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      include: this.operatorProfileCounts
+    });
+
+    return operators.map((operator) => this.toManagedOperatorProfile(operator));
+  }
+
+  async searchActiveOperatorProfiles(query: string): Promise<ManagedOperatorProfile[]> {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) {
+      return [];
+    }
+
+    const operators = await this.prisma.operatorProfile.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { name: { contains: keyword } },
+          { employeeCode: { contains: keyword } },
+          { pinyinInitials: { contains: keyword } }
+        ]
+      },
+      orderBy: [{ name: 'asc' }],
+      include: this.operatorProfileCounts,
+      take: 20
+    });
+
+    return operators.map((operator) => this.toManagedOperatorProfile(operator));
+  }
+
+  async createOperatorProfile(dto: CreateOperatorProfileDto): Promise<ManagedOperatorProfile> {
+    const operator = await this.prisma.operatorProfile.create({
+      data: this.toOperatorProfileData(dto),
+      include: this.operatorProfileCounts
+    });
+
+    return this.toManagedOperatorProfile(operator);
+  }
+
+  async updateOperatorProfile(id: string, dto: UpdateOperatorProfileDto): Promise<ManagedOperatorProfile> {
+    await this.ensureOperatorProfile(id);
+
+    const nextName = dto.name?.trim();
+    const operator = await this.prisma.operatorProfile.update({
+      where: { id },
+      data: {
+        ...(dto.employeeCode !== undefined ? { employeeCode: dto.employeeCode.trim() || null } : {}),
+        ...(nextName !== undefined ? { name: nextName } : {}),
+        ...(dto.pinyinInitials !== undefined || nextName !== undefined
+          ? { pinyinInitials: normalizeInitials(dto.pinyinInitials, nextName) }
+          : {}),
+        ...(dto.employmentType !== undefined ? { employmentType: dto.employmentType } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+      },
+      include: this.operatorProfileCounts
+    });
+
+    return this.toManagedOperatorProfile(operator);
+  }
+
+  async importOperatorProfiles(dto: ImportOperatorProfilesDto): Promise<{ created: number; updated: number }> {
+    const rows = dto.rows ?? [];
+    let created = 0;
+    let updated = 0;
+
+    for (const row of rows) {
+      const data = this.toOperatorProfileData(row);
+      if (data.employeeCode) {
+        const existing = await this.prisma.operatorProfile.findUnique({
+          where: { employeeCode: data.employeeCode }
+        });
+
+        if (existing) {
+          await this.prisma.operatorProfile.update({
+            where: { id: existing.id },
+            data
+          });
+          updated += 1;
+          continue;
+        }
+      }
+
+      await this.prisma.operatorProfile.create({ data });
+      created += 1;
+    }
+
+    return { created, updated };
+  }
+
+  async deleteOperatorProfile(id: string): Promise<void> {
+    const operator = await this.prisma.operatorProfile.findUnique({
+      where: { id },
+      include: this.operatorProfileCounts
+    });
+
+    if (!operator) {
+      throw this.notFound('OPERATOR_PROFILE_NOT_FOUND', '操作工档案不存在');
+    }
+
+    if (operator._count.inspectionRecords > 0) {
+      throw new ConflictException({
+        code: 'OPERATOR_PROFILE_REFERENCED',
+        message: '操作工已有检验记录，不能删除，可停用'
+      });
+    }
+
+    await this.prisma.operatorProfile.delete({ where: { id } });
   }
 
   async deleteDefectReason(id: string): Promise<void> {
@@ -383,6 +525,14 @@ export class MasterDataService {
     return line;
   }
 
+  private async ensureOperatorProfile(id: string): Promise<OperatorProfile> {
+    const operator = await this.prisma.operatorProfile.findUnique({ where: { id } });
+    if (!operator) {
+      throw this.notFound('OPERATOR_PROFILE_NOT_FOUND', '操作工档案不存在');
+    }
+    return operator;
+  }
+
   private toManagedUser(user: User & { _count: { inspectionRecords: number; sessions: number } }): ManagedUser {
     const { passwordHash: _passwordHash, _count, ...publicUser } = user;
     const referenced = _count.inspectionRecords > 0 || _count.sessions > 0;
@@ -391,6 +541,7 @@ export class MasterDataService {
       inspectionRecordCount: _count.inspectionRecords,
       sessionCount: _count.sessions,
       referenced,
+      canEdit: user.username !== 'admin',
       canDelete: !referenced,
       canResetPassword: user.role !== Role.ADMIN
     };
@@ -402,11 +553,46 @@ export class MasterDataService {
     const referenced = this.defectReasonReferenced(reason);
     return {
       ...reason,
+      deductionAmount: decimalToNumber(reason.deductionAmount),
       inspectionRecordCount: reason._count.inspectionRecordLinks,
       specialBarcodeCount: reason._count.specialBarcodes,
       referenced,
       canEdit: !referenced,
       canDelete: !referenced
+    };
+  }
+
+  private toManagedOperatorProfile(
+    operator: OperatorProfile & { _count: { inspectionRecords: number } }
+  ): ManagedOperatorProfile {
+    const referenced = operator._count.inspectionRecords > 0;
+    return {
+      ...operator,
+      inspectionRecordCount: operator._count.inspectionRecords,
+      referenced,
+      canDelete: !referenced
+    };
+  }
+
+  private toOperatorProfileData(
+    dto: CreateOperatorProfileDto
+  ): Prisma.OperatorProfileUncheckedCreateInput {
+    const name = dto.name.trim();
+    const employmentType = dto.employmentType;
+
+    if (employmentType !== OperatorEmploymentType.FORMAL && employmentType !== OperatorEmploymentType.LABOR) {
+      throw new BadRequestException({
+        code: 'OPERATOR_EMPLOYMENT_TYPE_INVALID',
+        message: '操作工类型无效'
+      });
+    }
+
+    return {
+      employeeCode: dto.employeeCode?.trim() || null,
+      name,
+      pinyinInitials: normalizeInitials(dto.pinyinInitials, name),
+      employmentType,
+      isActive: dto.isActive ?? true
     };
   }
 
@@ -551,4 +737,34 @@ export class MasterDataService {
       }
     };
   }
+
+  private get operatorProfileCounts(): Prisma.OperatorProfileInclude {
+    return {
+      _count: {
+        select: {
+          inspectionRecords: true
+        }
+      }
+    };
+  }
+}
+
+function normalizeInitials(initials: string | undefined | null, name: string | undefined): string {
+  const provided = initials?.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (provided) {
+    return provided;
+  }
+
+  return pinyin(name?.trim() ?? '', {
+    pattern: 'first',
+    toneType: 'none',
+    type: 'array'
+  })
+    .join('')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function decimalToNumber(value: Prisma.Decimal | number): number {
+  return typeof value === 'number' ? value : value.toNumber();
 }

@@ -30,6 +30,11 @@ describe('Master data API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const operatorMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -184,6 +189,20 @@ describe('Master data API', () => {
       .expect(400);
 
     expect(response.body.code).toBe('ADMIN_PASSWORD_RESET_NOT_ALLOWED');
+  });
+
+  it('blocks editing the built-in admin account through master data', async () => {
+    const admin = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' } });
+
+    const response = await adminAgent
+      .patch(`/master-data/users/${admin.id}`)
+      .send({ role: Role.QUERY })
+      .expect(400);
+
+    expect(response.body.code).toBe('ADMIN_ACCOUNT_EDIT_NOT_ALLOWED');
+    await expect(prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).resolves.toMatchObject({
+      role: Role.ADMIN
+    });
   });
 
   it('blocks deleting users that are referenced by inspection records', async () => {

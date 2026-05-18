@@ -4,6 +4,7 @@ export type ScanLookupResult = {
   barcode: string;
   partNumber: string;
   vehicleModel: string;
+  source?: 'SIMULATED_LOOKUP' | 'NO_BARCODE_PRODUCT' | 'PRODUCTION_ORDER_LOOKUP';
 };
 
 export interface ScanLookupGateway {

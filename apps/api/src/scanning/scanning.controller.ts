@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
@@ -33,6 +33,12 @@ export class ScanningController {
   @Roles(Role.INSPECTOR, Role.ADMIN)
   defectReasons() {
     return this.scanning.listActiveDefectReasons();
+  }
+
+  @Get('operators')
+  @Roles(Role.INSPECTOR, Role.ADMIN)
+  operators(@Query('q') query = '') {
+    return this.scanning.searchActiveOperators(query);
   }
 
   @Get('today-records')

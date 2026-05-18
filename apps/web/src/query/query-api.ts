@@ -1,8 +1,11 @@
 import { apiFetch } from '../api/client';
 import {
+  ChangeLogFilters,
+  ChangeLogQueryResponse,
   DashboardFilters,
   DashboardResponse,
   DefectReasonOption,
+  DetailRecord,
   DetailQueryFilters,
   DetailQueryResponse,
   ProductionLineOption
@@ -14,6 +17,19 @@ export function fetchDashboard(filters: DashboardFilters = {}): Promise<Dashboar
 
 export function fetchDetailRecords(filters: DetailQueryFilters = {}): Promise<DetailQueryResponse> {
   return apiFetch<DetailQueryResponse>(`/detail-query/records${toQueryString(filters)}`);
+}
+
+export function reclassifyInspectionRecord(recordId: string, defectReasonIds: string[]): Promise<DetailRecord> {
+  return apiFetch<DetailRecord>(`/detail-query/records/${recordId}/reclassify-unqualified`, {
+    method: 'POST',
+    body: JSON.stringify({ defectReasonIds })
+  });
+}
+
+export function fetchInspectionRecordChangeLogs(
+  filters: ChangeLogFilters = {}
+): Promise<ChangeLogQueryResponse> {
+  return apiFetch<ChangeLogQueryResponse>(`/detail-query/change-logs${toQueryString(filters)}`);
 }
 
 export function fetchQueryProductionLines(): Promise<ProductionLineOption[]> {

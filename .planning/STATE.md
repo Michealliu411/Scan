@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 06
-status: Phase 06 complete with dashboard full-screen polish; v1 ready for final review/ship
-last_updated: "2026-05-07T18:30:00+08:00"
+current_phase: post-v1-baseline-ready
+status: Post-v1 baseline aligned; next milestone framing pending
+last_updated: "2026-05-18T12:00:12+08:00"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -16,15 +16,15 @@ progress:
 # Project State: Workshop Inspection Scan Statistics System
 
 **Initialized:** 2026-05-06
-**Current phase:** 06
+**Current phase:** Post-v1 baseline ready
 **Workflow mode:** Interactive
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-05-06)
+See: `.planning/PROJECT.md` (updated 2026-05-18)
 
 **Core value:** Inspection stations can quickly and reliably record scan results, enforce duplicate rules, and produce trustworthy Beijing-time daily/monthly quality statistics by workshop, production line, and part number.
-**Current focus:** Phase 06 is complete with dashboard full-screen polish. v1 is ready for final review/ship.
+**Current focus:** Prepare a clean Windows intranet deployment package for the target server at `192.168.1.144`, with reset baseline data limited to the administrator account and default production line.
 
 ## Current Decisions
 
@@ -35,8 +35,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 - Business time: Beijing time.
 - Timestamp storage: UTC instants, with Asia/Shanghai business-day and month boundaries computed in backend utilities.
 - v1 statistics period: Beijing natural day/month; formal shifts deferred.
-- Scan lookup: simulated service in v1; real API integration deferred.
-- Duplicate rule: qualified barcode can be submitted once; unqualified records can repeat until qualified.
+- Scan lookup: the normal path now uses the configurable real water-wash-label interface through `SCAN_LOOKUP_URL`; active special-barcode rules resolve locally first.
+- Duplicate rule: qualified barcode is terminal; after a barcode has a qualified record it cannot be submitted as qualified again or unqualified. Unqualified records can repeat before the final qualified record to support reinspection.
 - Phase 2 scan display: show part number first and vehicle model second after lookup.
 - Phase 2 lookup failure: keep the barcode input and show a clear not-found retry message.
 - Phase 2 submission flow: Qualified submits immediately; Unqualified reveals multi-select defect reasons and requires Submit.
@@ -46,10 +46,20 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 - Authentication: httpOnly cookie sessions.
 - Login mutual exclusion: newest login invalidates any prior session for the same user; old terminal is redirected on next request.
 - Project structure: monorepo with `apps/web` and `apps/api`.
+- Field servers are offline. Packages should be offline-friendly by default, and any release that requires server-side internet access, dependency installation, or database migration must call that out before handoff.
 - Seed administrator: username `admin`, initial password `admin`, forced first-login password change.
 - Planning docs stay local-only and are excluded from git.
-- Phase 6 keeps real plant API integration deferred while isolating simulated lookup behind a replaceable gateway provider token.
+- Phase 6 created the lookup gateway boundary; the post-v1 pass has now replaced the normal simulated provider with the real configurable lookup service.
+- Scan lookup now uses the real configurable water-wash-label production-order interface by default, with `SCAN_LOOKUP_URL` controlling the intranet endpoint and the existing special-barcode rules taking priority before external lookup.
 - Dashboard full-screen is implemented as page-level full-screen mode in the query analysis module, with Escape as the keyboard exit path.
+- Dashboard total output and unqualified counts are distinct-barcode statistics: repeated scans of the same barcode count once for total output, and repeated unqualified records for the same barcode count once for unqualified output and unqualified part distribution.
+- Scan parsing UI includes a clear action to reset barcode input, parsed part data, selected defect reasons, and transient messages after a wrong scan.
+- The three inspection action buttons in the scanning operation panel are intentionally larger than standard buttons for workshop use.
+- Master-data editing is field-scoped: user rows expose role editing; unreferenced defect reasons expose name editing; production lines expose name editing even after reference; unreferenced special barcodes expose dirty-barcode reason editing or no-barcode product vehicle model and part number editing.
+- Built-in admin account cannot be edited through master data. Every logged-in user can change their own password from the top bar after entering the current password.
+- Defect reasons and production lines support active-state toggling from master data lists.
+- Dashboard production-line monthly totals are shown as a grouped bar chart instead of the previous middle summary table.
+- Trial-run feedback added larger equal-sized operation buttons, current-day default query dates, Excel-only exports, independent operator profiles with Excel import, unqualified-inspection operator selection by pinyin initials, and defect-code deduction amounts with unqualified deduction totals.
 
 ## Roadmap Position
 
@@ -63,6 +73,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 ## Open Questions / Carried Verification Debt
 
 - No v1 verification debt currently tracked.
+- Next-phase planning should decide whether field hardening becomes a small `v1.1` milestone or the first formal `v2` phase.
 
 ## Recent Activity
 
@@ -102,9 +113,25 @@ See: `.planning/PROJECT.md` (updated 2026-05-06)
 - 2026-05-07: Completed Plan 06-02 with persisted scanner layout presets, adaptive workstation grid, and scanner focus coverage.
 - 2026-05-07: Completed Plan 06-03 with scan lookup gateway boundary, full verification, browser UAT, and requirement status sync.
 - 2026-05-07: Added dashboard full-screen viewing polish with component coverage, frontend typecheck, and frontend lint verification.
+- 2026-05-09: Captured post-v1 adjustment direction for terminal qualified barcode locking, distinct-barcode output/unqualified dashboard statistics, scan parse clear action, and larger inspection operation buttons.
+- 2026-05-09: Added post-v1 master-data edit direction for user roles, defect reason names before reference, production line names regardless of reference, and unreferenced special barcode details.
+- 2026-05-09: Added admin account edit lock and a logged-in self-service password change entry in the app top bar.
+- 2026-05-09: Added master-data active-state toggles for defect reasons and production lines.
+- 2026-05-09: Replaced the dashboard production-line totals table with a grouped bar chart for total output, qualified count, and unqualified count.
+- 2026-05-09: Adjusted dashboard fullscreen layout to fit within variable display sizes by distributing viewport height across KPI and chart regions without overflow.
+- 2026-05-11: Changed test-data seeding to reset business data, keep only admin, LINE-01, and 条码污损, while preserving existing special barcode records.
+- 2026-05-11: Expanded initial defect-reason seed data with A0-A41 production defect codes while keeping 条码污损 for dirty barcode workflows.
+- 2026-05-11: Adjusted special barcode scan submissions so active special barcodes can be recorded repeatedly as qualified or unqualified without the normal terminal qualified lock.
+- 2026-05-11: Fixed master-data delete operations by wiring user, defect reason, and production-line delete buttons to their backend APIs and refresh flows.
+- 2026-05-11: Adjusted inspection scanning so normal resolved scans auto-submit as qualified, unqualified scans require preselecting defect reasons before scanning and manual submit, and query users can reclassify qualified records to unqualified with operation-log query support.
+- 2026-05-14: Replaced the simulated normal scan lookup provider with a configurable real production-order lookup endpoint at `SCAN_LOOKUP_URL`, defaulting to `http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai`.
+- 2026-05-18: Aligned project docs with the implemented post-v1 baseline and recommended the next phase focus on field hardening and delivery reliability.
+- 2026-05-18: Captured offline-server packaging constraint: update packages should avoid server-side network access by default, and any unavoidable online/dependency/migration requirement must be surfaced during packaging.
+- 2026-05-18: Implemented trial-run feedback covering larger equal operation buttons, today-default query dates, Excel exports, operator profiles/import/search, and defect-code deduction amounts.
+- 2026-05-18: Reset the local packaged SQLite baseline to only `admin` and `LINE-01/产线01`, built the app for API base `http://192.168.1.144:3000`, and produced `releases/scan-windows-20260518-120012.zip`.
 
 ## Session Continuity
 
-Last session: 2026-05-07T17:03:00+08:00
-Stopped at: Phase 06 complete with dashboard full-screen polish; v1 ready for final review/ship.
-Resume file: none required unless opening a final ship/review workflow.
+Last session: 2026-05-18T09:04:11+08:00
+Stopped at: Post-v1 baseline aligned in planning docs; next-stage direction ready to discuss or formalize.
+Resume file: none required unless opening the next milestone workflow.

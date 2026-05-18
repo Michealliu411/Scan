@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiFetch<AuthSession>('/auth/me', { skipSessionExpiredHandler: true })
       .then((serverSession) => {
         if (isCurrent) {
-          setSessionState(serverSession);
+          setSessionState(isAuthSession(serverSession) ? serverSession : null);
           setSessionExpiredNotice(null);
         }
       })
@@ -118,4 +118,23 @@ function writeLocalStorage(key: string, value: string): void {
   }
 
   window.localStorage.setItem(key, value);
+}
+
+function isAuthSession(value: unknown): value is AuthSession {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const session = value as Partial<AuthSession>;
+  return Boolean(
+    session.user &&
+      typeof session.user.id === 'string' &&
+      typeof session.user.username === 'string' &&
+      typeof session.user.role === 'string' &&
+      typeof session.user.mustChangePassword === 'boolean' &&
+      session.productionLine &&
+      typeof session.productionLine.id === 'string' &&
+      typeof session.productionLine.code === 'string' &&
+      typeof session.productionLine.name === 'string'
+  );
 }

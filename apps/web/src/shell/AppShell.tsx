@@ -1,8 +1,11 @@
-import { LogOut } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { apiFetch } from '../api/client';
+import { KeyRound, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { ApiError, apiFetch, extractApiMessage } from '../api/client';
 import { useAuth } from '../auth/auth-store';
+import { AuthSession, AuthUser } from '../auth/auth-types';
+import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
+import { TextInput } from '../components/TextInput';
 import { MasterDataPage } from '../master-data/MasterDataPage';
 import { QueryAnalysisPage } from '../query/QueryAnalysisPage';
 import { InspectionScanningPage } from '../scanning/InspectionScanningPage';
@@ -15,8 +18,13 @@ const roleLabels = {
 };
 
 type ThemePreference = 'light' | 'dark';
+type ChangePasswordResponse = {
+  ok: true;
+  user: AuthUser;
+};
 
 const themePreferenceKey = 'scan.theme';
+const sidebarPreferenceKey = 'scan.sidebar';
 const themeOptions: Array<{ value: ThemePreference; label: string }> = [
   { value: 'light', label: '浅色' },
   { value: 'dark', label: '深色' }
@@ -32,11 +40,18 @@ export function AppShell() {
   const [activeModule, setActiveModule] = useState<ModuleKey>(() => allowedModules[0]?.key ?? 'inspection');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => readSidebarPreference());
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [passwordChangedMessage, setPasswordChangedMessage] = useState<string | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.localStorage.setItem(themePreferenceKey, theme);
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(sidebarPreferenceKey, isSidebarExpanded ? 'expanded' : 'collapsed');
+  }, [isSidebarExpanded]);
 
   if (!session) {
     return null;
@@ -65,10 +80,38 @@ export function AppShell() {
   }
 
   return (
-    <div className="app-layout">
-      <aside className="app-sidebar">
-        <div className="app-sidebar__title">车间检验扫描统计系统</div>
-        <RoleNav role={session.user.role} activeModule={activeModuleDefinition.key} onModuleChange={setActiveModule} />
+    <div
+      className={[
+        'app-layout',
+        isSidebarExpanded ? 'app-layout--sidebar-expanded' : 'app-layout--sidebar-collapsed'
+      ].join(' ')}
+    >
+      <aside
+        className={['app-sidebar', isSidebarExpanded ? 'app-sidebar--expanded' : 'app-sidebar--collapsed'].join(' ')}
+        aria-label="主菜单"
+      >
+        <div className="app-sidebar__header">
+          <div className="app-sidebar__title">车间检验扫描统计系统</div>
+          <button
+            type="button"
+            className="app-sidebar__toggle"
+            aria-label={isSidebarExpanded ? '收起菜单' : '展开菜单'}
+            aria-pressed={isSidebarExpanded}
+            onClick={() => setIsSidebarExpanded((current) => !current)}
+          >
+            {isSidebarExpanded ? (
+              <PanelLeftClose size={18} strokeWidth={2} aria-hidden="true" />
+            ) : (
+              <PanelLeftOpen size={18} strokeWidth={2} aria-hidden="true" />
+            )}
+          </button>
+        </div>
+        <RoleNav
+          role={session.user.role}
+          activeModule={activeModuleDefinition.key}
+          isCollapsed={!isSidebarExpanded}
+          onModuleChange={setActiveModule}
+        />
       </aside>
 
       <div className="app-main">
@@ -97,12 +140,25 @@ export function AppShell() {
                 </button>
               ))}
             </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setPasswordChangedMessage(null);
+                setIsPasswordDialogOpen(true);
+              }}
+            >
+              <KeyRound size={16} strokeWidth={2} aria-hidden="true" />
+              修改密码
+            </Button>
             <Button type="button" variant="ghost" loading={isLoggingOut} loadingLabel="退出登录" onClick={handleLogout}>
               <LogOut size={16} strokeWidth={2} aria-hidden="true" />
               退出登录
             </Button>
           </div>
         </header>
+
+        {passwordChangedMessage ? <Alert variant="success">{passwordChangedMessage}</Alert> : null}
 
         <main className="app-content" aria-labelledby="module-title">
           {activeModuleDefinition.key === 'inspection' ? (
@@ -119,8 +175,120 @@ export function AppShell() {
           )}
         </main>
       </div>
+      {isPasswordDialogOpen ? (
+        <ChangeOwnPasswordDialog
+          session={session}
+          onClose={() => setIsPasswordDialogOpen(false)}
+          onChanged={(nextSession) => {
+            auth.setSession(nextSession);
+            setIsPasswordDialogOpen(false);
+            setPasswordChangedMessage('密码已修改');
+          }}
+        />
+      ) : null}
     </div>
   );
+}
+
+function ChangeOwnPasswordDialog({
+  session,
+  onClose,
+  onChanged
+}: {
+  session: AuthSession;
+  onClose: () => void;
+  onChanged: (session: AuthSession) => void;
+}) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const canSubmit = Boolean(currentPassword && newPassword && confirmPassword && !isSubmitting);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+
+    if (newPassword !== confirmPassword) {
+      setError('两次输入的密码不一致');
+      return;
+    }
+
+    if (!canSubmit) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await apiFetch<ChangePasswordResponse>('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      onChanged({
+        ...session,
+        user: response.user
+      });
+    } catch (caught) {
+      setError(extractPasswordError(caught, '密码修改失败'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <div className="form-panel" role="dialog" aria-modal="true" aria-label="修改密码">
+        <div className="form-panel__header">
+          <h2>修改密码</h2>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            关闭
+          </Button>
+        </div>
+        <form className="master-form" onSubmit={handleSubmit}>
+          {error ? <Alert variant="error">{error}</Alert> : null}
+          <TextInput
+            label="当前密码"
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
+          <TextInput
+            label="新密码"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+          />
+          <TextInput
+            label="确认新密码"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+          <div className="form-actions">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" loading={isSubmitting} loadingLabel="修改中" disabled={!canSubmit}>
+              确认修改
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function extractPasswordError(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return extractApiMessage(error.payload) ?? fallback;
+  }
+
+  return fallback;
 }
 
 function readThemePreference(): ThemePreference {
@@ -130,4 +298,12 @@ function readThemePreference(): ThemePreference {
 
   const stored = window.localStorage.getItem(themePreferenceKey);
   return stored === 'dark' || stored === 'light' ? stored : 'light';
+}
+
+function readSidebarPreference(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.localStorage.getItem(sidebarPreferenceKey) === 'expanded';
 }

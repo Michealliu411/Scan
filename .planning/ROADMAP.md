@@ -7,7 +7,7 @@
 
 ## Overview
 
-This roadmap builds the system as a deployable internal Web application in six phases. The sequence prioritizes data integrity and scan workflow first, then master data, special barcode rules, analytics, and final UI hardening.
+This roadmap built the system as a deployable internal Web application in six phases. The original sequence prioritized data integrity and scan workflow first, then master data, special barcode rules, analytics, and final UI hardening.
 
 | Phase | Name | Goal | Requirements |
 |-------|------|------|--------------|
@@ -167,7 +167,18 @@ All 62 v1 requirements are mapped to exactly one phase.
 
 ## Next Step
 
-Phase 06 is complete. v1 is ready for final review/ship.
+Phase 06 is complete and the post-v1 adjustment pass has already added real scan lookup, revised scan workflow rules, reclassification audit, safer master-data editing, and deployment hardening work.
+
+### Recommended Next Phase: Field Hardening And Delivery
+
+**Goal:** Turn the now-working system into a calmer field product by making external integration failures easier to diagnose and deployments less dependent on ideal network conditions.
+
+**Recommended scope:**
+1. External lookup observability: log failed calls, preserve interface error details, and make field diagnosis faster.
+2. Delivery hardening: formalize offline update packages, config preservation, and repeatable upgrade instructions for intranet servers without internet access.
+3. Operational visibility: expose enough health and version information for support without widening normal operator workflows.
+4. Deferred items that stay later: formal shift scheduling and richer reporting remain good future phases, but they are not the sharpest current pain.
 
 ---
 *Roadmap created: 2026-05-06*
+*Last updated: 2026-05-18 after post-v1 status alignment*

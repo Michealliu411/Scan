@@ -3,6 +3,7 @@ import {
   DefectReasonOption,
   InspectionDetailRecord,
   LookupBarcodeResponse,
+  OperatorOption,
   SubmitInspectionRecordPayload
 } from './scanning-types';
 
@@ -28,6 +29,11 @@ export async function lookupBarcode(barcode: string): Promise<LookupBarcodeRespo
 
 export function fetchDefectReasons(): Promise<DefectReasonOption[]> {
   return apiFetch<DefectReasonOption[]>('/scanning/defect-reasons');
+}
+
+export function searchOperators(query: string): Promise<OperatorOption[]> {
+  const params = new URLSearchParams({ q: query });
+  return apiFetch<OperatorOption[]>(`/scanning/operators?${params.toString()}`);
 }
 
 export async function fetchTodayRecords(): Promise<InspectionDetailRecord[]> {

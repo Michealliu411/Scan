@@ -1,9 +1,11 @@
-import { Role, SpecialBarcodeType } from '@prisma/client';
+import { OperatorEmploymentType, Role, SpecialBarcodeType } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsArray,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -60,6 +62,11 @@ export class CreateDefectReasonDto {
   @IsNotEmpty()
   name!: string;
 
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  deductionAmount?: number;
+
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
@@ -76,9 +83,63 @@ export class UpdateDefectReasonDto {
   @IsOptional()
   name?: string;
 
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  deductionAmount?: number;
+
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+}
+
+export class CreateOperatorProfileDto {
+  @IsString()
+  @IsOptional()
+  employeeCode?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsOptional()
+  pinyinInitials?: string;
+
+  @IsEnum(OperatorEmploymentType)
+  employmentType!: OperatorEmploymentType;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}
+
+export class UpdateOperatorProfileDto {
+  @IsString()
+  @IsOptional()
+  employeeCode?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  name?: string;
+
+  @IsString()
+  @IsOptional()
+  pinyinInitials?: string;
+
+  @IsEnum(OperatorEmploymentType)
+  @IsOptional()
+  employmentType?: OperatorEmploymentType;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
+}
+
+export class ImportOperatorProfilesDto {
+  @IsArray()
+  rows!: CreateOperatorProfileDto[];
 }
 
 export class CreateProductionLineDto {

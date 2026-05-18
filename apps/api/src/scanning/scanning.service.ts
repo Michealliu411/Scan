@@ -10,6 +10,7 @@ type InspectionRecordWithDetails = Prisma.InspectionRecordGetPayload<{
   include: {
     productionLine: true;
     inspector: true;
+    operatorProfile: true;
     defectReasonLinks: {
       include: {
         defectReason: true;
@@ -45,7 +46,8 @@ export class ScanningService {
         barcode: trimmedBarcode,
         partNumber: 'DIRTY-BARCODE',
         vehicleModel: null,
-        defectReasonIds: [specialBarcode.defectReasonId]
+        defectReasonIds: [specialBarcode.defectReasonId],
+        allowAfterQualified: true
       });
 
       return {
@@ -75,18 +77,51 @@ export class ScanningService {
     return {
       kind: 'RESOLVED_PART',
       ...result,
-      source: 'SIMULATED_LOOKUP'
+      source: result.source ?? 'SIMULATED_LOOKUP'
     };
   }
 
   async listActiveDefectReasons() {
-    return this.prisma.defectReason.findMany({
+    const reasons = await this.prisma.defectReason.findMany({
       where: { isActive: true },
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
       select: {
         id: true,
         code: true,
-        name: true
+        name: true,
+        deductionAmount: true
+      }
+    });
+
+    return reasons.map((reason) => ({
+      ...reason,
+      deductionAmount: reason.deductionAmount.toNumber()
+    }));
+  }
+
+  async searchActiveOperators(query: string) {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) {
+      return [];
+    }
+
+    return this.prisma.operatorProfile.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { name: { contains: keyword } },
+          { employeeCode: { contains: keyword } },
+          { pinyinInitials: { contains: keyword } }
+        ]
+      },
+      orderBy: [{ name: 'asc' }],
+      take: 20,
+      select: {
+        id: true,
+        employeeCode: true,
+        name: true,
+        pinyinInitials: true,
+        employmentType: true
       }
     });
   }
@@ -112,6 +147,7 @@ export class ScanningService {
     const barcode = dto.barcode.trim();
     const partNumber = dto.partNumber.trim();
     const vehicleModel = dto.vehicleModel?.trim() || null;
+    const operatorProfileId = dto.operatorProfileId?.trim() || null;
 
     if (!barcode) {
       throw new BadRequestException({
@@ -127,11 +163,30 @@ export class ScanningService {
       });
     }
 
+    if (operatorProfileId) {
+      const operator = await this.prisma.operatorProfile.findFirst({
+        where: {
+          id: operatorProfileId,
+          isActive: true
+        },
+        select: { id: true }
+      });
+
+      if (!operator) {
+        throw new BadRequestException({
+          code: 'OPERATOR_PROFILE_INVALID',
+          message: '操作工不存在或已停用'
+        });
+      }
+    }
+
     if (dto.result === InspectionResult.QUALIFIED) {
       return this.createQualifiedRecord(auth, {
         barcode,
         partNumber,
-        vehicleModel
+        vehicleModel,
+        operatorProfileId,
+        allowRepeat: await this.isActiveSpecialBarcode(barcode)
       });
     }
 
@@ -139,7 +194,9 @@ export class ScanningService {
       barcode,
       partNumber,
       vehicleModel,
-      defectReasonIds: dto.defectReasonIds ?? []
+      operatorProfileId,
+      defectReasonIds: dto.defectReasonIds ?? [],
+      allowAfterQualified: await this.isActiveSpecialBarcode(barcode)
     });
   }
 
@@ -149,23 +206,29 @@ export class ScanningService {
       barcode: string;
       partNumber: string;
       vehicleModel: string | null;
+      operatorProfileId: string | null;
+      allowRepeat?: boolean;
     }
   ) {
-    const existing = await this.findQualifiedRecord(data.barcode);
-    if (existing) {
-      throw this.duplicateQualified(existing);
+    if (!data.allowRepeat) {
+      const existing = await this.findQualifiedRecord(data.barcode);
+      if (existing) {
+        throw this.duplicateQualified(existing);
+      }
     }
 
     try {
       const record = await this.prisma.inspectionRecord.create({
         data: {
           barcode: data.barcode,
-          qualifiedBarcodeKey: data.barcode,
+          qualifiedBarcodeKey: data.allowRepeat ? null : data.barcode,
           partNumber: data.partNumber,
           vehicleModel: data.vehicleModel,
           productionLineId: auth.productionLine.id,
           inspectorId: auth.user.id,
+          operatorProfileId: data.operatorProfileId,
           result: InspectionResult.QUALIFIED,
+          deductionAmount: 0,
           scannedAt: nowUtc()
         },
         include: this.recordInclude
@@ -190,10 +253,21 @@ export class ScanningService {
       barcode: string;
       partNumber: string;
       vehicleModel: string | null;
+      operatorProfileId?: string | null;
       defectReasonIds: string[];
+      allowAfterQualified?: boolean;
     }
   ) {
     const defectReasonIds = [...new Set(data.defectReasonIds)];
+    const existingQualified = data.allowAfterQualified ? null : await this.findQualifiedRecord(data.barcode);
+
+    if (existingQualified) {
+      throw new ConflictException({
+        code: 'BARCODE_ALREADY_QUALIFIED',
+        message: '该条码已存在合格记录，不能再录入不合格',
+        existingRecord: this.toRecordResponse(existingQualified)
+      });
+    }
 
     if (!defectReasonIds.length) {
       throw new BadRequestException({
@@ -207,7 +281,7 @@ export class ScanningService {
         id: { in: defectReasonIds },
         isActive: true
       },
-      select: { id: true }
+      select: { id: true, deductionAmount: true }
     });
 
     if (activeReasons.length !== defectReasonIds.length) {
@@ -216,6 +290,8 @@ export class ScanningService {
         message: '缺陷原因不存在或已停用'
       });
     }
+
+    const deductionAmount = activeReasons.reduce((total, reason) => total + reason.deductionAmount.toNumber(), 0);
 
     const record = await this.prisma.$transaction(async (tx) => {
       const created = await tx.inspectionRecord.create({
@@ -226,7 +302,9 @@ export class ScanningService {
           vehicleModel: data.vehicleModel,
           productionLineId: auth.productionLine.id,
           inspectorId: auth.user.id,
+          operatorProfileId: data.operatorProfileId || null,
           result: InspectionResult.UNQUALIFIED,
+          deductionAmount,
           scannedAt: nowUtc()
         }
       });
@@ -254,6 +332,15 @@ export class ScanningService {
     });
   }
 
+  private async isActiveSpecialBarcode(barcode: string): Promise<boolean> {
+    const specialBarcode = await this.prisma.specialBarcode.findUnique({
+      where: { barcode },
+      select: { isActive: true }
+    });
+
+    return specialBarcode?.isActive === true;
+  }
+
   private duplicateQualified(record: InspectionRecordWithDetails): ConflictException {
     return new ConflictException({
       code: 'QUALIFIED_BARCODE_DUPLICATE',
@@ -278,6 +365,7 @@ export class ScanningService {
       partNumber: record.partNumber,
       vehicleModel: record.vehicleModel,
       result: record.result,
+      deductionAmount: record.deductionAmount.toNumber(),
       scannedAt: record.scannedAt.toISOString(),
       productionLine: {
         id: record.productionLine.id,
@@ -288,10 +376,19 @@ export class ScanningService {
         id: record.inspector.id,
         username: record.inspector.username
       },
+      operatorProfile: record.operatorProfile
+        ? {
+            id: record.operatorProfile.id,
+            employeeCode: record.operatorProfile.employeeCode,
+            name: record.operatorProfile.name,
+            employmentType: record.operatorProfile.employmentType
+          }
+        : null,
       defectReasons: record.defectReasonLinks.map((link) => ({
         id: link.defectReason.id,
         code: link.defectReason.code,
-        name: link.defectReason.name
+        name: link.defectReason.name,
+        deductionAmount: link.defectReason.deductionAmount.toNumber()
       }))
     };
   }
@@ -300,6 +397,7 @@ export class ScanningService {
     return {
       productionLine: true,
       inspector: true,
+      operatorProfile: true,
       defectReasonLinks: {
         include: {
           defectReason: true

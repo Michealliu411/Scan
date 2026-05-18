@@ -34,10 +34,11 @@ const modules: ModuleDefinition[] = [
 type RoleNavProps = {
   role: Role;
   activeModule: ModuleKey;
+  isCollapsed?: boolean;
   onModuleChange: (module: ModuleKey) => void;
 };
 
-export function RoleNav({ role, activeModule, onModuleChange }: RoleNavProps) {
+export function RoleNav({ role, activeModule, isCollapsed = false, onModuleChange }: RoleNavProps) {
   return (
     <nav className="role-nav" aria-label="主导航">
       {getAllowedModules(role).map((module) => {
@@ -50,10 +51,11 @@ export function RoleNav({ role, activeModule, onModuleChange }: RoleNavProps) {
             type="button"
             className={['role-nav__item', isActive ? 'role-nav__item--active' : ''].filter(Boolean).join(' ')}
             aria-current={isActive ? 'page' : undefined}
+            title={isCollapsed ? module.label : undefined}
             onClick={() => onModuleChange(module.key)}
           >
             <Icon size={18} strokeWidth={2} aria-hidden="true" />
-            <span>{module.label}</span>
+            <span className="role-nav__label">{module.label}</span>
           </button>
         );
       })}

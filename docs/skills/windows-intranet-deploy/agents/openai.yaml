@@ -1,0 +1,3 @@
+display_name: Windows Intranet Deploy
+short_description: Deploy and update small Windows Server intranet apps safely.
+default_prompt: Use this skill to package, deploy, update, or troubleshoot a small Windows Server intranet app with Node, React/Vite, Prisma, and SQLite.

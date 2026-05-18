@@ -10,6 +10,7 @@ export type DefectReasonOption = {
   id: string;
   code: string;
   name: string;
+  deductionAmount?: number;
 };
 
 export type DashboardFilters = {
@@ -60,6 +61,13 @@ export type DetailQueryFilters = {
   defectReasonId?: string;
 };
 
+export type ChangeLogFilters = {
+  startDate?: string;
+  endDate?: string;
+  barcode?: string;
+  operatorUsername?: string;
+};
+
 export type DetailRecord = {
   id: string;
   scannedAt: string;
@@ -68,14 +76,41 @@ export type DetailRecord = {
   vehicleModel: string | null;
   partNumber: string;
   result: InspectionResult;
+  deductionAmount?: number;
   defectReasons: DefectReasonOption[];
   inspector: {
     id: string;
     username: string;
   };
+  operatorProfile?: {
+    id: string;
+    employeeCode: string | null;
+    name: string;
+    employmentType: 'FORMAL' | 'LABOR';
+  } | null;
 };
 
 export type DetailQueryResponse = {
   records: DetailRecord[];
+  limit: number;
+};
+
+export type InspectionRecordChangeLog = {
+  id: string;
+  inspectionRecordId: string;
+  operatedAt: string;
+  barcode: string;
+  partNumber: string;
+  previousResult: InspectionResult;
+  newResult: InspectionResult;
+  defectReasons: DefectReasonOption[];
+  operator: {
+    id: string;
+    username: string;
+  };
+};
+
+export type ChangeLogQueryResponse = {
+  logs: InspectionRecordChangeLog[];
   limit: number;
 };

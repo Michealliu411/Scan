@@ -32,6 +32,11 @@ describe('Analytics API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const operatorMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -116,6 +121,14 @@ describe('Analytics API', () => {
       productionLineId: lineOneId,
       result: InspectionResult.UNQUALIFIED,
       scannedAt: new Date('2026-05-10T01:00:00.000Z'),
+      defectReasonIds: [defectReasonId]
+    });
+    await seedRecord({
+      barcode: 'MAY-UNQUAL-A',
+      partNumber: 'PN-A',
+      productionLineId: lineOneId,
+      result: InspectionResult.UNQUALIFIED,
+      scannedAt: new Date('2026-05-10T02:00:00.000Z'),
       defectReasonIds: [defectReasonId]
     });
     await seedRecord({

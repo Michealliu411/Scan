@@ -33,6 +33,16 @@ describe('Detail query API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const changeLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260511095143_add_inspection_record_change_log/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: changeLogMigrationSql });
+    const operatorMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -51,6 +61,7 @@ describe('Detail query API', () => {
 
   beforeEach(async () => {
     await prisma.session.deleteMany();
+    await prisma.inspectionRecordChangeLog.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
     await prisma.specialBarcode.deleteMany();
@@ -194,6 +205,8 @@ describe('Detail query API', () => {
         }))
       });
     }
+
+    return record;
   }
 
   it('returns newest-first detail rows with all audit fields for a Beijing date range', async () => {
@@ -267,6 +280,75 @@ describe('Detail query API', () => {
     ]);
   });
 
+  it('lets query users change a qualified record to unqualified and records an operation log', async () => {
+    const query = await login('query');
+    const qualified = await prisma.inspectionRecord.findUniqueOrThrow({
+      where: { qualifiedBarcodeKey: 'DETAIL-QUALIFIED' }
+    });
+
+    const response = await query
+      .post(`/detail-query/records/${qualified.id}/reclassify-unqualified`)
+      .send({ defectReasonIds: [scratchReasonId] })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      id: qualified.id,
+      barcode: 'DETAIL-QUALIFIED',
+      result: InspectionResult.UNQUALIFIED,
+      defectReasons: [{ id: scratchReasonId, code: 'SCRATCH', name: '划伤' }]
+    });
+
+    const updated = await prisma.inspectionRecord.findUniqueOrThrow({
+      where: { id: qualified.id },
+      include: { defectReasonLinks: true }
+    });
+    expect(updated.result).toBe(InspectionResult.UNQUALIFIED);
+    expect(updated.qualifiedBarcodeKey).toBeNull();
+    expect(updated.defectReasonLinks.map((link) => link.defectReasonId)).toEqual([scratchReasonId]);
+
+    const logs = await query
+      .get('/detail-query/change-logs?startDate=2026-05-01&endDate=2026-05-31&barcode=DETAIL-QUALIFIED&operatorUsername=query')
+      .expect(200);
+
+    expect(logs.body.logs).toHaveLength(1);
+    expect(logs.body.logs[0]).toMatchObject({
+      inspectionRecordId: qualified.id,
+      barcode: 'DETAIL-QUALIFIED',
+      partNumber: 'PN-BETA',
+      previousResult: InspectionResult.QUALIFIED,
+      newResult: InspectionResult.UNQUALIFIED,
+      operator: { username: 'query' },
+      defectReasons: [{ id: scratchReasonId, code: 'SCRATCH', name: '划伤' }]
+    });
+    expect(logs.body.limit).toBe(200);
+  });
+
+  it('requires defect reasons and a currently qualified record for reclassification', async () => {
+    const query = await login('query');
+    const qualified = await prisma.inspectionRecord.findUniqueOrThrow({
+      where: { qualifiedBarcodeKey: 'DETAIL-QUALIFIED' }
+    });
+    const unqualified = await prisma.inspectionRecord.findFirstOrThrow({
+      where: { barcode: 'DETAIL-NEWEST' }
+    });
+
+    await query
+      .post(`/detail-query/records/${qualified.id}/reclassify-unqualified`)
+      .send({ defectReasonIds: [] })
+      .expect(400)
+      .expect((response) => {
+        expect(response.body.code).toBe('DEFECT_REASON_REQUIRED');
+      });
+
+    await query
+      .post(`/detail-query/records/${unqualified.id}/reclassify-unqualified`)
+      .send({ defectReasonIds: [scratchReasonId] })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.code).toBe('INSPECTION_RECORD_NOT_QUALIFIED');
+      });
+  });
+
   it('blocks inspectors from detail query endpoints', async () => {
     const inspector = await login('inspector');
 
@@ -275,5 +357,9 @@ describe('Detail query API', () => {
       .expect(403);
 
     expect(response.body.code).toBe('ROLE_FORBIDDEN');
+
+    await inspector
+      .get('/detail-query/change-logs?startDate=2026-05-01&endDate=2026-05-31')
+      .expect(403);
   });
 });

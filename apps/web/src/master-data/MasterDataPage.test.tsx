@@ -2,13 +2,19 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createManagedUser,
+  updateManagedUser,
+  deleteManagedUser,
   fetchManagedDefectReasons,
   fetchManagedProductionLines,
   fetchManagedSpecialBarcodes,
   generateSpecialBarcode,
   fetchManagedUsers,
   createDefectReason,
+  updateDefectReason,
+  deleteDefectReason,
   createProductionLine,
+  updateProductionLine,
+  deleteProductionLine,
   createSpecialBarcode,
   updateSpecialBarcode,
   deleteSpecialBarcode,
@@ -19,6 +25,8 @@ import { MasterDataPage } from './MasterDataPage';
 vi.mock('./master-data-api', () => ({
   fetchManagedUsers: vi.fn(),
   createManagedUser: vi.fn(),
+  updateManagedUser: vi.fn(),
+  deleteManagedUser: vi.fn(),
   resetManagedUserPassword: vi.fn(),
   fetchManagedDefectReasons: vi.fn(),
   fetchManagedProductionLines: vi.fn()
@@ -26,7 +34,11 @@ vi.mock('./master-data-api', () => ({
   fetchManagedSpecialBarcodes: vi.fn(),
   generateSpecialBarcode: vi.fn(),
   createDefectReason: vi.fn(),
+  updateDefectReason: vi.fn(),
+  deleteDefectReason: vi.fn(),
   createProductionLine: vi.fn(),
+  updateProductionLine: vi.fn(),
+  deleteProductionLine: vi.fn(),
   createSpecialBarcode: vi.fn(),
   updateSpecialBarcode: vi.fn(),
   deleteSpecialBarcode: vi.fn()
@@ -34,13 +46,19 @@ vi.mock('./master-data-api', () => ({
 
 const fetchManagedUsersMock = vi.mocked(fetchManagedUsers);
 const createManagedUserMock = vi.mocked(createManagedUser);
+const updateManagedUserMock = vi.mocked(updateManagedUser);
+const deleteManagedUserMock = vi.mocked(deleteManagedUser);
 const resetManagedUserPasswordMock = vi.mocked(resetManagedUserPassword);
 const fetchManagedDefectReasonsMock = vi.mocked(fetchManagedDefectReasons);
 const fetchManagedProductionLinesMock = vi.mocked(fetchManagedProductionLines);
 const fetchManagedSpecialBarcodesMock = vi.mocked(fetchManagedSpecialBarcodes);
 const generateSpecialBarcodeMock = vi.mocked(generateSpecialBarcode);
 const createDefectReasonMock = vi.mocked(createDefectReason);
+const updateDefectReasonMock = vi.mocked(updateDefectReason);
+const deleteDefectReasonMock = vi.mocked(deleteDefectReason);
 const createProductionLineMock = vi.mocked(createProductionLine);
+const updateProductionLineMock = vi.mocked(updateProductionLine);
+const deleteProductionLineMock = vi.mocked(deleteProductionLine);
 const createSpecialBarcodeMock = vi.mocked(createSpecialBarcode);
 const updateSpecialBarcodeMock = vi.mocked(updateSpecialBarcode);
 const deleteSpecialBarcodeMock = vi.mocked(deleteSpecialBarcode);
@@ -56,8 +74,20 @@ describe('MasterDataPage', () => {
         isActive: true,
         mustChangePassword: false,
         referenced: true,
+        canEdit: true,
         canDelete: false,
         canResetPassword: true
+      },
+      {
+        id: 'user-admin',
+        username: 'admin',
+        role: 'ADMIN',
+        isActive: true,
+        mustChangePassword: false,
+        referenced: true,
+        canEdit: false,
+        canDelete: false,
+        canResetPassword: false
       }
     ]);
     fetchManagedDefectReasonsMock.mockResolvedValue([
@@ -104,9 +134,22 @@ describe('MasterDataPage', () => {
       isActive: true,
       mustChangePassword: true,
       referenced: false,
+      canEdit: true,
       canDelete: true,
       canResetPassword: true
     });
+    updateManagedUserMock.mockResolvedValue({
+      id: 'user-1',
+      username: 'inspector',
+      role: 'QUERY',
+      isActive: true,
+      mustChangePassword: false,
+      referenced: true,
+      canEdit: true,
+      canDelete: false,
+      canResetPassword: true
+    });
+    deleteManagedUserMock.mockResolvedValue({ ok: true });
     resetManagedUserPasswordMock.mockResolvedValue({ ok: true });
     createDefectReasonMock.mockResolvedValue({
       id: 'reason-2',
@@ -117,6 +160,16 @@ describe('MasterDataPage', () => {
       canEdit: true,
       canDelete: true
     });
+    updateDefectReasonMock.mockResolvedValue({
+      id: 'reason-1',
+      code: 'SCRATCH',
+      name: '轻微划伤',
+      isActive: true,
+      referenced: false,
+      canEdit: true,
+      canDelete: true
+    });
+    deleteDefectReasonMock.mockResolvedValue({ ok: true });
     createProductionLineMock.mockResolvedValue({
       id: 'line-2',
       code: 'LINE-02',
@@ -125,6 +178,16 @@ describe('MasterDataPage', () => {
       isActive: true,
       referenced: false,
       canDelete: true
+    });
+    deleteProductionLineMock.mockResolvedValue({ ok: true });
+    updateProductionLineMock.mockResolvedValue({
+      id: 'line-1',
+      code: 'LINE-01',
+      name: '一号线新名称',
+      sortOrder: 1,
+      isActive: true,
+      referenced: true,
+      canDelete: false
     });
     createSpecialBarcodeMock.mockResolvedValue({
       id: 'special-2',
@@ -198,6 +261,7 @@ describe('MasterDataPage', () => {
           isActive: true,
           mustChangePassword: true,
           referenced: false,
+          canEdit: true,
           canDelete: true,
           canResetPassword: true
         }
@@ -236,6 +300,87 @@ describe('MasterDataPage', () => {
     expect(await screen.findByText('密码已重置，用户下次登录需要修改密码')).toBeTruthy();
   });
 
+  it('deletes an unreferenced user and refreshes user data', async () => {
+    fetchManagedUsersMock
+      .mockResolvedValueOnce([
+        {
+          id: 'user-delete',
+          username: 'delete-me',
+          role: 'INSPECTOR',
+          isActive: true,
+          mustChangePassword: false,
+          referenced: false,
+          canEdit: true,
+          canDelete: true,
+          canResetPassword: true
+        }
+      ])
+      .mockResolvedValueOnce([]);
+
+    render(<MasterDataPage />);
+
+    const row = await screen.findByRole('row', { name: /delete-me/ });
+    fireEvent.click(within(row).getByRole('button', { name: '删除用户 delete-me' }));
+
+    await waitFor(() => {
+      expect(deleteManagedUserMock).toHaveBeenCalledWith('user-delete');
+      expect(fetchManagedUsersMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('用户已删除')).toBeTruthy();
+  });
+
+  it('disables admin account editing in the user table', async () => {
+    render(<MasterDataPage />);
+
+    const row = await screen.findByRole('row', { name: /admin/ });
+
+    expect(within(row).getByRole('button', { name: '编辑用户 admin' })).toHaveProperty('disabled', true);
+  });
+
+  it('edits a user role and refreshes user data', async () => {
+    fetchManagedUsersMock
+      .mockResolvedValueOnce([
+        {
+          id: 'user-1',
+          username: 'inspector',
+          role: 'INSPECTOR',
+          isActive: true,
+          mustChangePassword: false,
+          referenced: true,
+          canEdit: true,
+          canDelete: false,
+          canResetPassword: true
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'user-1',
+          username: 'inspector',
+          role: 'QUERY',
+          isActive: true,
+          mustChangePassword: false,
+          referenced: true,
+          canEdit: true,
+          canDelete: false,
+          canResetPassword: true
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    const row = await screen.findByRole('row', { name: /inspector/ });
+    fireEvent.click(within(row).getByRole('button', { name: '编辑用户 inspector' }));
+    expect(screen.getByRole('dialog', { name: '编辑用户：inspector' }).parentElement?.classList.contains('modal-backdrop')).toBe(true);
+    fireEvent.change(screen.getByLabelText('角色'), { target: { value: 'QUERY' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => {
+      expect(updateManagedUserMock).toHaveBeenCalledWith('user-1', { role: 'QUERY' });
+      expect(fetchManagedUsersMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('查询用户')).toBeTruthy();
+  });
+
   it('creates a defect reason and refreshes defect data', async () => {
     fetchManagedDefectReasonsMock
       .mockResolvedValueOnce([])
@@ -268,6 +413,112 @@ describe('MasterDataPage', () => {
       expect(fetchManagedDefectReasonsMock).toHaveBeenCalledTimes(2);
     });
     expect(await screen.findByText('BURR')).toBeTruthy();
+  });
+
+  it('edits an unreferenced defect reason name', async () => {
+    fetchManagedDefectReasonsMock
+      .mockResolvedValueOnce([
+        {
+          id: 'reason-1',
+          code: 'SCRATCH',
+          name: '划伤',
+          isActive: true,
+          referenced: false,
+          canEdit: true,
+          canDelete: true
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'reason-1',
+          code: 'SCRATCH',
+          name: '轻微划伤',
+          isActive: true,
+          referenced: false,
+          canEdit: true,
+          canDelete: true
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '缺陷原因' }));
+    const row = await screen.findByRole('row', { name: /SCRATCH/ });
+    fireEvent.click(within(row).getByRole('button', { name: '编辑缺陷原因 SCRATCH' }));
+    fireEvent.change(screen.getByLabelText('缺陷名称'), { target: { value: '轻微划伤' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => {
+      expect(updateDefectReasonMock).toHaveBeenCalledWith('reason-1', { name: '轻微划伤' });
+      expect(fetchManagedDefectReasonsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('轻微划伤')).toBeTruthy();
+  });
+
+  it('toggles defect reason active state and refreshes defect data', async () => {
+    fetchManagedDefectReasonsMock
+      .mockResolvedValueOnce([
+        {
+          id: 'reason-1',
+          code: 'SCRATCH',
+          name: '划伤',
+          isActive: true,
+          referenced: true,
+          canEdit: false,
+          canDelete: false
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'reason-1',
+          code: 'SCRATCH',
+          name: '划伤',
+          isActive: false,
+          referenced: true,
+          canEdit: false,
+          canDelete: false
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '缺陷原因' }));
+    const row = await screen.findByRole('row', { name: /SCRATCH/ });
+    fireEvent.click(within(row).getByRole('button', { name: '停用缺陷原因 SCRATCH' }));
+
+    await waitFor(() => {
+      expect(updateDefectReasonMock).toHaveBeenCalledWith('reason-1', { isActive: false });
+      expect(fetchManagedDefectReasonsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('停用')).toBeTruthy();
+  });
+
+  it('deletes an unreferenced defect reason and refreshes defect data', async () => {
+    fetchManagedDefectReasonsMock
+      .mockResolvedValueOnce([
+        {
+          id: 'reason-delete',
+          code: 'BURR',
+          name: '毛刺',
+          isActive: true,
+          referenced: false,
+          canEdit: true,
+          canDelete: true
+        }
+      ])
+      .mockResolvedValueOnce([]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '缺陷原因' }));
+    const row = await screen.findByRole('row', { name: /BURR/ });
+    fireEvent.click(within(row).getByRole('button', { name: '删除缺陷原因 BURR' }));
+
+    await waitFor(() => {
+      expect(deleteDefectReasonMock).toHaveBeenCalledWith('reason-delete');
+      expect(fetchManagedDefectReasonsMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('缺陷原因已删除')).toBeTruthy();
   });
 
   it('creates a production line and refreshes line data', async () => {
@@ -304,6 +555,112 @@ describe('MasterDataPage', () => {
       expect(fetchManagedProductionLinesMock).toHaveBeenCalledTimes(2);
     });
     expect(await screen.findByText('LINE-02')).toBeTruthy();
+  });
+
+  it('edits a referenced production line name', async () => {
+    fetchManagedProductionLinesMock
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          code: 'LINE-01',
+          name: '一号线',
+          sortOrder: 1,
+          isActive: true,
+          referenced: true,
+          canDelete: false
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          code: 'LINE-01',
+          name: '一号线新名称',
+          sortOrder: 1,
+          isActive: true,
+          referenced: true,
+          canDelete: false
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '产线' }));
+    const row = await screen.findByRole('row', { name: /LINE-01/ });
+    fireEvent.click(within(row).getByRole('button', { name: '编辑产线 LINE-01' }));
+    fireEvent.change(screen.getByLabelText('产线名称'), { target: { value: '一号线新名称' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => {
+      expect(updateProductionLineMock).toHaveBeenCalledWith('line-1', { name: '一号线新名称' });
+      expect(fetchManagedProductionLinesMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('一号线新名称')).toBeTruthy();
+  });
+
+  it('toggles production line active state and refreshes line data', async () => {
+    fetchManagedProductionLinesMock
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          code: 'LINE-01',
+          name: '一号线',
+          sortOrder: 1,
+          isActive: true,
+          referenced: true,
+          canDelete: false
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'line-1',
+          code: 'LINE-01',
+          name: '一号线',
+          sortOrder: 1,
+          isActive: false,
+          referenced: true,
+          canDelete: false
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '产线' }));
+    const row = await screen.findByRole('row', { name: /LINE-01/ });
+    fireEvent.click(within(row).getByRole('button', { name: '停用产线 LINE-01' }));
+
+    await waitFor(() => {
+      expect(updateProductionLineMock).toHaveBeenCalledWith('line-1', { isActive: false });
+      expect(fetchManagedProductionLinesMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('停用')).toBeTruthy();
+  });
+
+  it('deletes an unreferenced production line and refreshes line data', async () => {
+    fetchManagedProductionLinesMock
+      .mockResolvedValueOnce([
+        {
+          id: 'line-delete',
+          code: 'LINE-DELETE',
+          name: '待删除产线',
+          sortOrder: 9,
+          isActive: true,
+          referenced: false,
+          canDelete: true
+        }
+      ])
+      .mockResolvedValueOnce([]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '产线' }));
+    const row = await screen.findByRole('row', { name: /LINE-DELETE/ });
+    fireEvent.click(within(row).getByRole('button', { name: '删除产线 LINE-DELETE' }));
+
+    await waitFor(() => {
+      expect(deleteProductionLineMock).toHaveBeenCalledWith('line-delete');
+      expect(fetchManagedProductionLinesMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('产线已删除')).toBeTruthy();
   });
 
   it('creates a no-barcode product special barcode with generated UUID preview', async () => {
@@ -396,5 +753,55 @@ describe('MasterDataPage', () => {
       expect(deleteSpecialBarcodeMock).toHaveBeenCalledWith('special-2');
       expect(fetchManagedSpecialBarcodesMock).toHaveBeenCalledTimes(3);
     });
+  });
+
+  it('edits an unreferenced no-barcode product vehicle model and part number', async () => {
+    fetchManagedSpecialBarcodesMock
+      .mockResolvedValueOnce([
+        {
+          id: 'special-2',
+          type: 'NO_BARCODE_PRODUCT',
+          barcode: '44444444-4444-4444-8444-444444444444',
+          vehicleModel: '车型-X',
+          partNumber: 'PN-X',
+          defectReason: null,
+          isActive: true,
+          referenced: false,
+          canEdit: true,
+          canDelete: true
+        }
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'special-2',
+          type: 'NO_BARCODE_PRODUCT',
+          barcode: '44444444-4444-4444-8444-444444444444',
+          vehicleModel: '车型-Y',
+          partNumber: 'PN-Y',
+          defectReason: null,
+          isActive: true,
+          referenced: false,
+          canEdit: true,
+          canDelete: true
+        }
+      ]);
+
+    render(<MasterDataPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '特殊条码' }));
+    const row = await screen.findByRole('row', { name: /44444444/ });
+    fireEvent.click(within(row).getByRole('button', { name: '编辑特殊条码 44444444-4444-4444-8444-444444444444' }));
+    fireEvent.change(screen.getByLabelText('车型'), { target: { value: '车型-Y' } });
+    fireEvent.change(screen.getByLabelText('零件号'), { target: { value: 'PN-Y' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }));
+
+    await waitFor(() => {
+      expect(updateSpecialBarcodeMock).toHaveBeenCalledWith('special-2', {
+        vehicleModel: '车型-Y',
+        partNumber: 'PN-Y'
+      });
+      expect(fetchManagedSpecialBarcodesMock).toHaveBeenCalledTimes(2);
+    });
+    expect(await screen.findByText('PN-Y')).toBeTruthy();
   });
 });

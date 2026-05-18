@@ -1,17 +1,28 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiFetch } from '../api/client';
 import { AuthSession } from '../auth/auth-types';
 import { AppShell } from './AppShell';
 
 const clearSessionMock = vi.fn();
+const setSessionMock = vi.fn((nextSession: AuthSession) => {
+  currentSession = nextSession;
+});
 let currentSession: AuthSession;
+
+vi.mock('../api/client', () => ({
+  apiFetch: vi.fn()
+}));
 
 vi.mock('../auth/auth-store', () => ({
   useAuth: () => ({
     session: currentSession,
-    clearSession: clearSessionMock
+    clearSession: clearSessionMock,
+    setSession: setSessionMock
   })
 }));
+
+const apiFetchMock = vi.mocked(apiFetch);
 
 vi.mock('../scanning/InspectionScanningPage', () => ({
   InspectionScanningPage: () => <h1 id="module-title">检验扫描</h1>
@@ -28,6 +39,7 @@ vi.mock('../master-data/MasterDataPage', () => ({
 describe('AppShell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    apiFetchMock.mockResolvedValue({ ok: true });
     window.localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
     currentSession = createSession('ADMIN');
@@ -65,6 +77,56 @@ describe('AppShell', () => {
     expect(within(nav).queryByRole('button', { name: /检验扫描/ })).toBeNull();
     expect(within(nav).getByRole('button', { name: /查询分析/ })).toBeTruthy();
     expect(within(nav).queryByRole('button', { name: /基础数据/ })).toBeNull();
+  });
+
+  it('starts with the sidebar collapsed and persists explicit expansion', () => {
+    render(<AppShell />);
+
+    expect(screen.getByLabelText('主菜单').classList.contains('app-sidebar--collapsed')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: '展开菜单' }));
+
+    expect(screen.getByLabelText('主菜单').classList.contains('app-sidebar--expanded')).toBe(true);
+    expect(window.localStorage.getItem('scan.sidebar')).toBe('expanded');
+    expect(screen.getByRole('button', { name: '收起菜单' })).toBeTruthy();
+  });
+
+  it('lets a logged-in user change their own password from the top bar', async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        id: 'user-1',
+        username: 'admin',
+        role: 'ADMIN',
+        mustChangePassword: false
+      }
+    });
+
+    render(<AppShell />);
+
+    fireEvent.click(screen.getByRole('button', { name: '修改密码' }));
+    expect(screen.getByRole('dialog', { name: '修改密码' }).parentElement?.classList.contains('modal-backdrop')).toBe(true);
+    fireEvent.change(screen.getByLabelText('当前密码'), { target: { value: 'old-password' } });
+    fireEvent.change(screen.getByLabelText('新密码'), { target: { value: 'new-password' } });
+    fireEvent.change(screen.getByLabelText('确认新密码'), { target: { value: 'new-password' } });
+    fireEvent.click(screen.getByRole('button', { name: '确认修改' }));
+
+    await waitFor(() => {
+      expect(apiFetchMock).toHaveBeenCalledWith('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: 'old-password', newPassword: 'new-password' })
+      });
+      expect(setSessionMock).toHaveBeenCalledWith({
+        ...currentSession,
+        user: {
+          id: 'user-1',
+          username: 'admin',
+          role: 'ADMIN',
+          mustChangePassword: false
+        }
+      });
+    });
+    expect(await screen.findByText('密码已修改')).toBeTruthy();
   });
 });
 

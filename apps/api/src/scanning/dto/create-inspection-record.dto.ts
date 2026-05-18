@@ -14,6 +14,10 @@ export class CreateInspectionRecordDto {
   @IsOptional()
   vehicleModel?: string;
 
+  @IsString()
+  @IsOptional()
+  operatorProfileId?: string;
+
   @IsEnum(InspectionResult)
   result!: InspectionResult;
 

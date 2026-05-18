@@ -21,8 +21,12 @@ describe('Scanning API', () => {
   let otherProductionLineId: string;
   let scratchReasonId: string;
   let dirtyReasonId: string;
+  let fetchMock: jest.Mock;
 
   beforeAll(async () => {
+    fetchMock = jest.fn();
+    global.fetch = fetchMock;
+
     if (existsSync(dbPath)) {
       rmSync(dbPath);
     }
@@ -32,6 +36,11 @@ describe('Scanning API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const operatorMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -49,6 +58,8 @@ describe('Scanning API', () => {
   });
 
   beforeEach(async () => {
+    fetchMock.mockReset();
+
     await prisma.session.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
@@ -156,21 +167,38 @@ describe('Scanning API', () => {
   }
 
   it('lets an inspector lookup a normal barcode and returns part information', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ErrCode: 200,
+        Message: '查询成功！',
+        JsonData: {
+          成品零件编号: '88460CC280',
+          成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH"
+        }
+      })
+    );
     const inspector = await login('inspector');
 
     const response = await inspector
       .post('/scanning/lookup')
-      .send({ barcode: 'abc-123456' })
+      .send({ barcode: 'shui-xi-001' })
       .expect(201);
 
     expect(response.body).toMatchObject({
-      barcode: 'abc-123456',
-      partNumber: 'PN-123456',
-      vehicleModel: '车型-ABC1'
+      barcode: 'shui-xi-001',
+      partNumber: '88460CC280',
+      vehicleModel: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      source: 'PRODUCTION_ORDER_LOOKUP'
     });
   });
 
   it('returns SCAN_LOOKUP_NOT_FOUND when lookup cannot resolve a barcode', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ErrCode: 500,
+        Message: '未找到零件信息，请修改后重试或重新扫描'
+      })
+    );
     const inspector = await login('inspector');
 
     const response = await inspector
@@ -304,6 +332,39 @@ describe('Scanning API', () => {
           result: InspectionResult.QUALIFIED
         }
       })
+    ).resolves.toBe(1);
+  });
+
+  it('blocks unqualified submission after the same barcode already has a qualified record', async () => {
+    const inspector = await login('inspector');
+
+    await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'LOCKED-000001',
+        partNumber: 'PN-000001',
+        vehicleModel: '车型-LOCKED',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(201);
+
+    const response = await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'LOCKED-000001',
+        partNumber: 'PN-000001',
+        vehicleModel: '车型-LOCKED',
+        result: InspectionResult.UNQUALIFIED,
+        defectReasonIds: [scratchReasonId]
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: 'BARCODE_ALREADY_QUALIFIED',
+      message: '该条码已存在合格记录，不能再录入不合格'
+    });
+    await expect(
+      prisma.inspectionRecord.count({ where: { barcode: 'LOCKED-000001' } })
     ).resolves.toBe(1);
   });
 
@@ -442,4 +503,85 @@ describe('Scanning API', () => {
       source: 'NO_BARCODE_PRODUCT'
     });
   });
+
+  it('allows repeated qualified submissions for active special barcodes', async () => {
+    const inspector = await login('inspector');
+    const specialBarcode = '44444444-4444-4444-8444-444444444444';
+    await prisma.specialBarcode.create({
+      data: {
+        type: SpecialBarcodeType.NO_BARCODE_PRODUCT,
+        barcode: specialBarcode,
+        vehicleModel: '车型-重复',
+        partNumber: 'PN-SPECIAL-REPEAT',
+        isActive: true
+      }
+    });
+
+    for (const suffix of ['A', 'B']) {
+      await inspector
+        .post('/scanning/records')
+        .send({
+          barcode: specialBarcode,
+          partNumber: `PN-SPECIAL-REPEAT-${suffix}`,
+          vehicleModel: '车型-重复',
+          result: InspectionResult.QUALIFIED
+        })
+        .expect(201);
+    }
+
+    await expect(
+      prisma.inspectionRecord.count({
+        where: {
+          barcode: specialBarcode,
+          result: InspectionResult.QUALIFIED
+        }
+      })
+    ).resolves.toBe(2);
+  });
+
+  it('allows unqualified submissions after a special barcode has qualified records', async () => {
+    const inspector = await login('inspector');
+    const specialBarcode = '55555555-5555-4555-8555-555555555555';
+    await prisma.specialBarcode.create({
+      data: {
+        type: SpecialBarcodeType.NO_BARCODE_PRODUCT,
+        barcode: specialBarcode,
+        vehicleModel: '车型-特殊',
+        partNumber: 'PN-SPECIAL-MIXED',
+        isActive: true
+      }
+    });
+
+    await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: specialBarcode,
+        partNumber: 'PN-SPECIAL-MIXED',
+        vehicleModel: '车型-特殊',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(201);
+
+    await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: specialBarcode,
+        partNumber: 'PN-SPECIAL-MIXED',
+        vehicleModel: '车型-特殊',
+        result: InspectionResult.UNQUALIFIED,
+        defectReasonIds: [scratchReasonId]
+      })
+      .expect(201);
+
+    await expect(
+      prisma.inspectionRecord.count({ where: { barcode: specialBarcode } })
+    ).resolves.toBe(2);
+  });
 });
+
+function jsonResponse(body: unknown): Response {
+  return {
+    ok: true,
+    json: async () => body
+  } as Response;
+}

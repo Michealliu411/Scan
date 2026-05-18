@@ -7,6 +7,7 @@ export type ManagedUser = {
   isActive: boolean;
   mustChangePassword: boolean;
   referenced: boolean;
+  canEdit: boolean;
   canDelete: boolean;
   canResetPassword: boolean;
 };
@@ -15,9 +16,23 @@ export type ManagedDefectReason = {
   id: string;
   code: string;
   name: string;
+  deductionAmount?: number;
   isActive: boolean;
   referenced: boolean;
   canEdit: boolean;
+  canDelete: boolean;
+};
+
+export type OperatorEmploymentType = 'FORMAL' | 'LABOR';
+
+export type ManagedOperatorProfile = {
+  id: string;
+  employeeCode: string | null;
+  name: string;
+  pinyinInitials: string;
+  employmentType: OperatorEmploymentType;
+  isActive: boolean;
+  referenced: boolean;
   canDelete: boolean;
 };
 
@@ -53,6 +68,7 @@ export type ManagedSpecialBarcode = {
 export type MasterDataSnapshot = {
   users: ManagedUser[];
   defectReasons: ManagedDefectReason[];
+  operators: ManagedOperatorProfile[];
   productionLines: ManagedProductionLine[];
   specialBarcodes: ManagedSpecialBarcode[];
 };

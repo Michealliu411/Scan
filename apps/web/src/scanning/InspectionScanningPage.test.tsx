@@ -48,18 +48,22 @@ describe('InspectionScanningPage', () => {
     });
   });
 
-  it('pressing Enter calls lookup and renders part number before vehicle model', async () => {
+  it("pressing Enter submits a qualified record automatically and removes the 合格 action", async () => {
     render(<InspectionScanningPage />);
 
     fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'ABC123456' } });
     fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
 
-    expect(await screen.findByText('PN-123456')).toBeTruthy();
-    expect(lookupBarcodeMock).toHaveBeenCalledWith('ABC123456');
-
-    const partNumber = screen.getByText('PN-123456');
-    const vehicleModel = screen.getByText('车型-ABC1');
-    expect(partNumber.compareDocumentPosition(vehicleModel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => {
+      expect(lookupBarcodeMock).toHaveBeenCalledWith('ABC123456');
+      expect(submitInspectionRecordMock).toHaveBeenCalledWith({
+        barcode: 'ABC123456',
+        partNumber: 'PN-123456',
+        vehicleModel: '车型-ABC1',
+        result: 'QUALIFIED'
+      });
+    });
+    expect(screen.queryByRole('button', { name: '合格' })).toBeNull();
   });
 
   it('lookup failure preserves the barcode and renders the retry message', async () => {
@@ -79,39 +83,67 @@ describe('InspectionScanningPage', () => {
     expect(screen.getByLabelText('条码')).toHaveProperty('value', 'UNKNOWN-001');
   });
 
-  it("clicking 合格 immediately submits with result: 'QUALIFIED'", async () => {
+  it('clears barcode, resolved part, and messages when clicking 清空', async () => {
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
-    fireEvent.click(screen.getByRole('button', { name: '合格' }));
+    await resolveBarcodeForUnqualified();
+    fireEvent.click(screen.getByRole('button', { name: '清空' }));
 
-    await waitFor(() => {
-      expect(submitInspectionRecordMock).toHaveBeenCalledWith({
-        barcode: 'ABC123456',
-        partNumber: 'PN-123456',
-        vehicleModel: '车型-ABC1',
-        result: 'QUALIFIED'
-      });
-    });
+    expect(screen.getByLabelText('条码')).toHaveProperty('value', '');
+    expect(screen.queryByText('PN-123456')).toBeNull();
   });
 
-  it('clicking 不合格 reveals defect reasons with Submit disabled before selection for SCAN-07', async () => {
+  it('clicking 不合格 before scanning reveals defect reasons with Submit disabled before selection for SCAN-07', async () => {
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
     fireEvent.click(screen.getByRole('button', { name: '不合格' }));
 
     expect(await screen.findByText('选择缺陷原因')).toBeTruthy();
     expect(screen.getByRole('button', { name: '提交' })).toHaveProperty('disabled', true);
+    expect(submitInspectionRecordMock).not.toHaveBeenCalled();
   });
 
-  it('selecting multiple reasons enables Submit and submits both IDs', async () => {
+  it('uses the matched action panel layout with two wide operation buttons', async () => {
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
+    await waitFor(() => {
+      expect(fetchDefectReasonsMock).toHaveBeenCalled();
+      expect(fetchTodayRecordsMock).toHaveBeenCalled();
+    });
+
+    const actionsPanel = screen.getByRole('region', { name: '检验操作' });
+    const actionButtons = actionsPanel.querySelector('.scan-action-buttons');
+
+    expect(actionsPanel.classList.contains('scan-actions--matched-input')).toBe(true);
+    expect(actionButtons?.classList.contains('scan-action-buttons--two-wide')).toBe(true);
+  });
+
+  it('disables browser history suggestions on the barcode scan input', async () => {
+    render(<InspectionScanningPage />);
+
+    await waitFor(() => {
+      expect(fetchDefectReasonsMock).toHaveBeenCalled();
+      expect(fetchTodayRecordsMock).toHaveBeenCalled();
+    });
+
+    const barcodeInput = screen.getByLabelText('条码');
+
+    expect(barcodeInput.getAttribute('autocomplete')).toBe('off');
+    expect(barcodeInput.getAttribute('name')).toBe('scan-barcode');
+    expect(barcodeInput.closest('form')?.getAttribute('autocomplete')).toBe('off');
+  });
+
+  it('selecting reasons before scanning then clicking Submit creates an unqualified record', async () => {
+    render(<InspectionScanningPage />);
+
     fireEvent.click(screen.getByRole('button', { name: '不合格' }));
     fireEvent.click(await screen.findByLabelText('SCRATCH 划伤'));
     fireEvent.click(screen.getByLabelText('DIRTY 污损'));
+    expect(screen.getByRole('button', { name: '提交' })).toHaveProperty('disabled', true);
+
+    fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'ABC123456' } });
+    fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
+    expect(await screen.findByText('PN-123456')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '提交' }));
 
     await waitFor(() => {
@@ -128,8 +160,7 @@ describe('InspectionScanningPage', () => {
   it('successful submit clears the barcode input and calls fetchTodayRecords', async () => {
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
-    fireEvent.click(screen.getByRole('button', { name: '合格' }));
+    scanBarcode();
 
     expect(await screen.findByText('检验记录已提交')).toBeTruthy();
     await waitFor(() => {
@@ -153,8 +184,7 @@ describe('InspectionScanningPage', () => {
 
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
-    fireEvent.click(screen.getByRole('button', { name: '合格' }));
+    scanBarcode();
 
     expect(await screen.findByText('该条码已存在合格记录，不能重复提交')).toBeTruthy();
     expect(screen.getByText(/扫描测试产线/)).toBeTruthy();
@@ -238,8 +268,7 @@ describe('InspectionScanningPage', () => {
   it('focuses the barcode input after a successful qualified submission', async () => {
     render(<InspectionScanningPage />);
 
-    await resolveBarcode();
-    fireEvent.click(screen.getByRole('button', { name: '合格' }));
+    scanBarcode();
 
     expect(await screen.findByText('检验记录已提交')).toBeTruthy();
     await waitFor(() => {
@@ -248,7 +277,13 @@ describe('InspectionScanningPage', () => {
   });
 });
 
-async function resolveBarcode() {
+function scanBarcode() {
+  fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'ABC123456' } });
+  fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
+}
+
+async function resolveBarcodeForUnqualified() {
+  fireEvent.click(screen.getByRole('button', { name: '不合格' }));
   fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'ABC123456' } });
   fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
   await screen.findByText('PN-123456');
