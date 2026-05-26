@@ -33,4 +33,16 @@ export class ProductionLinesService {
       }
     });
   }
+
+  findDefaultActive(): Promise<ProductionLineSummary | null> {
+    return this.prisma.productionLine.findFirst({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        code: true,
+        name: true
+      }
+    });
+  }
 }

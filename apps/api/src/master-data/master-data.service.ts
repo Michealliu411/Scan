@@ -14,6 +14,7 @@ import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { pinyin } from 'pinyin-pro';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActiveSessionContext } from '../sessions/sessions.service';
 import {
   CreateDefectReasonDto,
   CreateManagedUserDto,
@@ -88,22 +89,27 @@ export class MasterDataService {
     return users.map((user) => this.toManagedUser(user));
   }
 
-  async createUser(dto: CreateManagedUserDto): Promise<ManagedUser> {
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username.trim(),
-        passwordHash: await argon2.hash(dto.password),
-        role: dto.role,
-        isActive: dto.isActive ?? true,
-        mustChangePassword: true
-      },
-      include: this.userCounts
+  async createUser(auth: ActiveSessionContext, dto: CreateManagedUserDto): Promise<ManagedUser> {
+    const passwordHash = await argon2.hash(dto.password);
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          username: dto.username.trim(),
+          passwordHash,
+          role: dto.role,
+          isActive: dto.isActive ?? true,
+          mustChangePassword: true
+        },
+        include: this.userCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'CREATE', 'user', created.id, created.username, null, this.toAuditUser(created));
+      return created;
     });
 
     return this.toManagedUser(user);
   }
 
-  async updateUser(id: string, dto: UpdateManagedUserDto): Promise<ManagedUser> {
+  async updateUser(auth: ActiveSessionContext, id: string, dto: UpdateManagedUserDto): Promise<ManagedUser> {
     const current = await this.ensureUser(id);
 
     if (current.username === 'admin') {
@@ -113,20 +119,24 @@ export class MasterDataService {
       });
     }
 
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: {
-        ...(dto.username !== undefined ? { username: dto.username.trim() } : {}),
-        ...(dto.role !== undefined ? { role: dto.role } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
-      },
-      include: this.userCounts
+    const user = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.update({
+        where: { id },
+        data: {
+          ...(dto.username !== undefined ? { username: dto.username.trim() } : {}),
+          ...(dto.role !== undefined ? { role: dto.role } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+        },
+        include: this.userCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'UPDATE', 'user', id, updated.username, this.toAuditUser(current), this.toAuditUser(updated));
+      return updated;
     });
 
     return this.toManagedUser(user);
   }
 
-  async resetUserPassword(id: string, dto: ResetManagedUserPasswordDto): Promise<void> {
+  async resetUserPassword(auth: ActiveSessionContext, id: string, dto: ResetManagedUserPasswordDto): Promise<void> {
     const user = await this.ensureUser(id);
 
     if (user.role === Role.ADMIN) {
@@ -136,16 +146,23 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        passwordHash: await argon2.hash(dto.password),
+    const passwordHash = await argon2.hash(dto.password);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id },
+        data: {
+          passwordHash,
+          mustChangePassword: true
+        }
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'RESET_PASSWORD', 'user', id, user.username, this.toAuditUser(user), {
+        ...this.toAuditUser(user),
         mustChangePassword: true
-      }
+      });
     });
   }
 
-  async deleteUser(id: string): Promise<void> {
+  async deleteUser(auth: ActiveSessionContext, id: string): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: this.userCounts
@@ -162,7 +179,10 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.user.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id } });
+      await this.writeAudit(tx, auth, 'master-data', 'DELETE', 'user', id, user.username, this.toAuditUser(user), null);
+    });
   }
 
   async listDefectReasons(): Promise<ManagedDefectReason[]> {
@@ -174,21 +194,25 @@ export class MasterDataService {
     return reasons.map((reason) => this.toManagedDefectReason(reason));
   }
 
-  async createDefectReason(dto: CreateDefectReasonDto): Promise<ManagedDefectReason> {
-    const reason = await this.prisma.defectReason.create({
-      data: {
-        code: dto.code.trim(),
-        name: dto.name.trim(),
-        deductionAmount: dto.deductionAmount ?? 0,
-        isActive: dto.isActive ?? true
-      },
-      include: this.defectReasonCounts
+  async createDefectReason(auth: ActiveSessionContext, dto: CreateDefectReasonDto): Promise<ManagedDefectReason> {
+    const reason = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.defectReason.create({
+        data: {
+          code: dto.code.trim(),
+          name: dto.name.trim(),
+          deductionAmount: dto.deductionAmount ?? 0,
+          isActive: dto.isActive ?? true
+        },
+        include: this.defectReasonCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'CREATE', 'defectReason', created.id, `${created.code} ${created.name}`, null, this.toAuditDefectReason(created));
+      return created;
     });
 
     return this.toManagedDefectReason(reason);
   }
 
-  async updateDefectReason(id: string, dto: UpdateDefectReasonDto): Promise<ManagedDefectReason> {
+  async updateDefectReason(auth: ActiveSessionContext, id: string, dto: UpdateDefectReasonDto): Promise<ManagedDefectReason> {
     const reason = await this.prisma.defectReason.findUnique({
       where: { id },
       include: this.defectReasonCounts
@@ -208,15 +232,19 @@ export class MasterDataService {
       });
     }
 
-    const updated = await this.prisma.defectReason.update({
-      where: { id },
-      data: {
-        ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
-        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        ...(dto.deductionAmount !== undefined ? { deductionAmount: dto.deductionAmount } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
-      },
-      include: this.defectReasonCounts
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await tx.defectReason.update({
+        where: { id },
+        data: {
+          ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+          ...(dto.deductionAmount !== undefined ? { deductionAmount: dto.deductionAmount } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+        },
+        include: this.defectReasonCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'UPDATE', 'defectReason', id, `${next.code} ${next.name}`, this.toAuditDefectReason(reason), this.toAuditDefectReason(next));
+      return next;
     });
 
     return this.toManagedDefectReason(updated);
@@ -224,7 +252,7 @@ export class MasterDataService {
 
   async listOperatorProfiles(): Promise<ManagedOperatorProfile[]> {
     const operators = await this.prisma.operatorProfile.findMany({
-      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
+      orderBy: [{ employeeCode: 'asc' }, { name: 'asc' }],
       include: this.operatorProfileCounts
     });
 
@@ -254,37 +282,45 @@ export class MasterDataService {
     return operators.map((operator) => this.toManagedOperatorProfile(operator));
   }
 
-  async createOperatorProfile(dto: CreateOperatorProfileDto): Promise<ManagedOperatorProfile> {
-    const operator = await this.prisma.operatorProfile.create({
-      data: this.toOperatorProfileData(dto),
-      include: this.operatorProfileCounts
+  async createOperatorProfile(auth: ActiveSessionContext, dto: CreateOperatorProfileDto): Promise<ManagedOperatorProfile> {
+    const operator = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.operatorProfile.create({
+        data: this.toOperatorProfileData(dto),
+        include: this.operatorProfileCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'CREATE', 'operatorProfile', created.id, this.operatorLabel(created), null, this.toAuditOperator(created));
+      return created;
     });
 
     return this.toManagedOperatorProfile(operator);
   }
 
-  async updateOperatorProfile(id: string, dto: UpdateOperatorProfileDto): Promise<ManagedOperatorProfile> {
-    await this.ensureOperatorProfile(id);
+  async updateOperatorProfile(auth: ActiveSessionContext, id: string, dto: UpdateOperatorProfileDto): Promise<ManagedOperatorProfile> {
+    const current = await this.ensureOperatorProfile(id);
 
     const nextName = dto.name?.trim();
-    const operator = await this.prisma.operatorProfile.update({
-      where: { id },
-      data: {
-        ...(dto.employeeCode !== undefined ? { employeeCode: dto.employeeCode.trim() || null } : {}),
-        ...(nextName !== undefined ? { name: nextName } : {}),
-        ...(dto.pinyinInitials !== undefined || nextName !== undefined
-          ? { pinyinInitials: normalizeInitials(dto.pinyinInitials, nextName) }
-          : {}),
-        ...(dto.employmentType !== undefined ? { employmentType: dto.employmentType } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
-      },
-      include: this.operatorProfileCounts
+    const operator = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.operatorProfile.update({
+        where: { id },
+        data: {
+          ...(dto.employeeCode !== undefined ? { employeeCode: dto.employeeCode.trim() || null } : {}),
+          ...(nextName !== undefined ? { name: nextName } : {}),
+          ...(dto.pinyinInitials !== undefined || nextName !== undefined
+            ? { pinyinInitials: normalizeInitials(dto.pinyinInitials, nextName) }
+            : {}),
+          ...(dto.employmentType !== undefined ? { employmentType: dto.employmentType } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+        },
+        include: this.operatorProfileCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'UPDATE', 'operatorProfile', id, this.operatorLabel(updated), this.toAuditOperator(current), this.toAuditOperator(updated));
+      return updated;
     });
 
     return this.toManagedOperatorProfile(operator);
   }
 
-  async importOperatorProfiles(dto: ImportOperatorProfilesDto): Promise<{ created: number; updated: number }> {
+  async importOperatorProfiles(auth: ActiveSessionContext, dto: ImportOperatorProfilesDto): Promise<{ created: number; updated: number }> {
     const rows = dto.rows ?? [];
     let created = 0;
     let updated = 0;
@@ -297,23 +333,25 @@ export class MasterDataService {
         });
 
         if (existing) {
-          await this.prisma.operatorProfile.update({
+          const updatedOperator = await this.prisma.operatorProfile.update({
             where: { id: existing.id },
             data
           });
+          await this.writeAudit(this.prisma, auth, 'master-data', 'UPDATE', 'operatorProfile', existing.id, this.operatorLabel(updatedOperator), this.toAuditOperator(existing), this.toAuditOperator(updatedOperator));
           updated += 1;
           continue;
         }
       }
 
-      await this.prisma.operatorProfile.create({ data });
+      const createdOperator = await this.prisma.operatorProfile.create({ data });
+      await this.writeAudit(this.prisma, auth, 'master-data', 'CREATE', 'operatorProfile', createdOperator.id, this.operatorLabel(createdOperator), null, this.toAuditOperator(createdOperator));
       created += 1;
     }
 
     return { created, updated };
   }
 
-  async deleteOperatorProfile(id: string): Promise<void> {
+  async deleteOperatorProfile(auth: ActiveSessionContext, id: string): Promise<void> {
     const operator = await this.prisma.operatorProfile.findUnique({
       where: { id },
       include: this.operatorProfileCounts
@@ -330,10 +368,13 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.operatorProfile.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.operatorProfile.delete({ where: { id } });
+      await this.writeAudit(tx, auth, 'master-data', 'DELETE', 'operatorProfile', id, this.operatorLabel(operator), this.toAuditOperator(operator), null);
+    });
   }
 
-  async deleteDefectReason(id: string): Promise<void> {
+  async deleteDefectReason(auth: ActiveSessionContext, id: string): Promise<void> {
     const reason = await this.prisma.defectReason.findUnique({
       where: { id },
       include: this.defectReasonCounts
@@ -350,7 +391,10 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.defectReason.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.defectReason.delete({ where: { id } });
+      await this.writeAudit(tx, auth, 'master-data', 'DELETE', 'defectReason', id, `${reason.code} ${reason.name}`, this.toAuditDefectReason(reason), null);
+    });
   }
 
   async listProductionLines(): Promise<ManagedProductionLine[]> {
@@ -362,38 +406,46 @@ export class MasterDataService {
     return lines.map((line) => this.toManagedProductionLine(line));
   }
 
-  async createProductionLine(dto: CreateProductionLineDto): Promise<ManagedProductionLine> {
-    const line = await this.prisma.productionLine.create({
-      data: {
-        code: dto.code.trim(),
-        name: dto.name.trim(),
-        sortOrder: dto.sortOrder,
-        isActive: dto.isActive ?? true
-      },
-      include: this.productionLineCounts
+  async createProductionLine(auth: ActiveSessionContext, dto: CreateProductionLineDto): Promise<ManagedProductionLine> {
+    const line = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.productionLine.create({
+        data: {
+          code: dto.code.trim(),
+          name: dto.name.trim(),
+          sortOrder: dto.sortOrder,
+          isActive: dto.isActive ?? true
+        },
+        include: this.productionLineCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'CREATE', 'productionLine', created.id, `${created.code} ${created.name}`, null, this.toAuditProductionLine(created));
+      return created;
     });
 
     return this.toManagedProductionLine(line);
   }
 
-  async updateProductionLine(id: string, dto: UpdateProductionLineDto): Promise<ManagedProductionLine> {
-    await this.ensureProductionLine(id);
+  async updateProductionLine(auth: ActiveSessionContext, id: string, dto: UpdateProductionLineDto): Promise<ManagedProductionLine> {
+    const current = await this.ensureProductionLine(id);
 
-    const line = await this.prisma.productionLine.update({
-      where: { id },
-      data: {
-        ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
-        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
-        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
-      },
-      include: this.productionLineCounts
+    const line = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.productionLine.update({
+        where: { id },
+        data: {
+          ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+          ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+        },
+        include: this.productionLineCounts
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'UPDATE', 'productionLine', id, `${updated.code} ${updated.name}`, this.toAuditProductionLine(current), this.toAuditProductionLine(updated));
+      return updated;
     });
 
     return this.toManagedProductionLine(line);
   }
 
-  async deleteProductionLine(id: string): Promise<void> {
+  async deleteProductionLine(auth: ActiveSessionContext, id: string): Promise<void> {
     const line = await this.prisma.productionLine.findUnique({
       where: { id },
       include: this.productionLineCounts
@@ -410,7 +462,10 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.productionLine.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.productionLine.delete({ where: { id } });
+      await this.writeAudit(tx, auth, 'master-data', 'DELETE', 'productionLine', id, `${line.code} ${line.name}`, this.toAuditProductionLine(line), null);
+    });
   }
 
   generateSpecialBarcode(): { barcode: string } {
@@ -428,20 +483,25 @@ export class MasterDataService {
     return Promise.all(specialBarcodes.map((specialBarcode) => this.toManagedSpecialBarcode(specialBarcode)));
   }
 
-  async createSpecialBarcode(dto: CreateSpecialBarcodeDto): Promise<ManagedSpecialBarcode> {
-    await this.validateSpecialBarcodeInput(dto.type, dto);
+  async createSpecialBarcode(auth: ActiveSessionContext, dto: CreateSpecialBarcodeDto): Promise<ManagedSpecialBarcode> {
+    const input = await this.normalizeSpecialBarcodeInput(dto.type, dto);
+    await this.validateSpecialBarcodeInput(input.type, input);
 
-    const created = await this.prisma.specialBarcode.create({
-      data: this.toSpecialBarcodeData(dto.type, dto),
-      include: {
-        defectReason: true
-      }
+    const created = await this.prisma.$transaction(async (tx) => {
+      const item = await tx.specialBarcode.create({
+        data: this.toSpecialBarcodeData(input.type, input),
+        include: {
+          defectReason: true
+        }
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'CREATE', 'specialBarcode', item.id, item.barcode, null, this.toAuditSpecialBarcode(item));
+      return item;
     });
 
     return this.toManagedSpecialBarcode(created);
   }
 
-  async updateSpecialBarcode(id: string, dto: UpdateSpecialBarcodeDto): Promise<ManagedSpecialBarcode> {
+  async updateSpecialBarcode(auth: ActiveSessionContext, id: string, dto: UpdateSpecialBarcodeDto): Promise<ManagedSpecialBarcode> {
     const current = await this.prisma.specialBarcode.findUnique({
       where: { id },
       include: {
@@ -467,7 +527,7 @@ export class MasterDataService {
       });
     }
 
-    await this.validateSpecialBarcodeInput(current.type, {
+    const input = await this.normalizeSpecialBarcodeInput(current.type, {
       ...current,
       ...dto,
       barcode: dto.barcode ?? current.barcode,
@@ -475,26 +535,34 @@ export class MasterDataService {
       vehicleModel: dto.vehicleModel ?? current.vehicleModel ?? undefined,
       partNumber: dto.partNumber ?? current.partNumber ?? undefined
     });
+    await this.validateSpecialBarcodeInput(current.type, input);
 
-    const updated = await this.prisma.specialBarcode.update({
-      where: { id },
-      data: {
-        ...(dto.barcode !== undefined ? { barcode: dto.barcode.trim() } : {}),
-        ...(dto.vehicleModel !== undefined ? { vehicleModel: dto.vehicleModel.trim() || null } : {}),
-        ...(dto.partNumber !== undefined ? { partNumber: dto.partNumber.trim() || null } : {}),
-        ...(dto.defectReasonId !== undefined ? { defectReasonId: dto.defectReasonId } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
-      },
-      include: {
-        defectReason: true
-      }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const item = await tx.specialBarcode.update({
+        where: { id },
+        data: {
+          ...(dto.barcode !== undefined ? { barcode: dto.barcode.trim() } : {}),
+          ...(dto.vehicleModel !== undefined ? { vehicleModel: dto.vehicleModel.trim() || null } : {}),
+          ...(dto.partNumber !== undefined ? { partNumber: dto.partNumber.trim() || null } : {}),
+          ...(dto.defectReasonId !== undefined || current.type === SpecialBarcodeType.DIRTY ? { defectReasonId: input.defectReasonId } : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {})
+        },
+        include: {
+          defectReason: true
+        }
+      });
+      await this.writeAudit(tx, auth, 'master-data', 'UPDATE', 'specialBarcode', id, item.barcode, this.toAuditSpecialBarcode(current), this.toAuditSpecialBarcode(item));
+      return item;
     });
 
     return this.toManagedSpecialBarcode(updated);
   }
 
-  async deleteSpecialBarcode(id: string): Promise<void> {
-    const specialBarcode = await this.prisma.specialBarcode.findUnique({ where: { id } });
+  async deleteSpecialBarcode(auth: ActiveSessionContext, id: string): Promise<void> {
+    const specialBarcode = await this.prisma.specialBarcode.findUnique({
+      where: { id },
+      include: { defectReason: true }
+    });
     if (!specialBarcode) {
       throw this.notFound('SPECIAL_BARCODE_NOT_FOUND', '特殊条码不存在');
     }
@@ -506,7 +574,10 @@ export class MasterDataService {
       });
     }
 
-    await this.prisma.specialBarcode.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.specialBarcode.delete({ where: { id } });
+      await this.writeAudit(tx, auth, 'master-data', 'DELETE', 'specialBarcode', id, specialBarcode.barcode, this.toAuditSpecialBarcode(specialBarcode), null);
+    });
   }
 
   private async ensureUser(id: string): Promise<User> {
@@ -670,6 +741,39 @@ export class MasterDataService {
     }
   }
 
+  private async normalizeSpecialBarcodeInput<T extends { type?: SpecialBarcodeType; defectReasonId?: string | null }>(
+    type: SpecialBarcodeType,
+    data: T
+  ): Promise<T & { type: SpecialBarcodeType; defectReasonId?: string | null }> {
+    if (type !== SpecialBarcodeType.DIRTY) {
+      return { ...data, type };
+    }
+
+    return {
+      ...data,
+      type,
+      defectReasonId: data.defectReasonId || (await this.ensureDirtyBarcodeReasonId())
+    };
+  }
+
+  private async ensureDirtyBarcodeReasonId(): Promise<string> {
+    const reason = await this.prisma.defectReason.upsert({
+      where: { code: 'BARCODE_DAMAGED' },
+      update: {
+        name: '条码污损',
+        isActive: true
+      },
+      create: {
+        code: 'BARCODE_DAMAGED',
+        name: '条码污损',
+        deductionAmount: 0,
+        isActive: true
+      }
+    });
+
+    return reason.id;
+  }
+
   private toSpecialBarcodeData(type: SpecialBarcodeType, dto: CreateSpecialBarcodeDto): Prisma.SpecialBarcodeUncheckedCreateInput {
     if (type === SpecialBarcodeType.DIRTY) {
       return {
@@ -703,6 +807,100 @@ export class MasterDataService {
 
   private notFound(code: string, message: string): NotFoundException {
     return new NotFoundException({ code, message });
+  }
+
+  private async writeAudit(
+    client: Pick<Prisma.TransactionClient, 'operationLog'>,
+    auth: ActiveSessionContext,
+    module: string,
+    action: string,
+    targetType: string,
+    targetId: string | null,
+    targetLabel: string,
+    before: unknown,
+    after: unknown
+  ): Promise<void> {
+    await client.operationLog.create({
+      data: {
+        module,
+        action,
+        targetType,
+        targetId,
+        targetLabel,
+        beforeJson: before === null ? null : JSON.stringify(before),
+        afterJson: after === null ? null : JSON.stringify(after),
+        operatorId: auth.user.id,
+        operatorUsername: auth.user.username
+      }
+    });
+  }
+
+  private toAuditUser(user: Pick<User, 'id' | 'username' | 'role' | 'isActive' | 'mustChangePassword'>) {
+    return {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword
+    };
+  }
+
+  private toAuditDefectReason(reason: Pick<DefectReason, 'id' | 'code' | 'name' | 'deductionAmount' | 'isActive'>) {
+    return {
+      id: reason.id,
+      code: reason.code,
+      name: reason.name,
+      deductionAmount: decimalToNumber(reason.deductionAmount),
+      isActive: reason.isActive
+    };
+  }
+
+  private toAuditOperator(operator: Pick<OperatorProfile, 'id' | 'employeeCode' | 'name' | 'pinyinInitials' | 'employmentType' | 'isActive'>) {
+    return {
+      id: operator.id,
+      employeeCode: operator.employeeCode,
+      name: operator.name,
+      pinyinInitials: operator.pinyinInitials,
+      employmentType: operator.employmentType,
+      isActive: operator.isActive
+    };
+  }
+
+  private toAuditProductionLine(line: Pick<ProductionLine, 'id' | 'code' | 'name' | 'sortOrder' | 'isActive'>) {
+    return {
+      id: line.id,
+      code: line.code,
+      name: line.name,
+      sortOrder: line.sortOrder,
+      isActive: line.isActive
+    };
+  }
+
+  private toAuditSpecialBarcode(
+    item: Pick<SpecialBarcode, 'id' | 'type' | 'barcode' | 'vehicleModel' | 'partNumber' | 'defectReasonId' | 'isActive'> & {
+      defectReason?: Pick<DefectReason, 'id' | 'code' | 'name'> | null;
+    }
+  ) {
+    return {
+      id: item.id,
+      type: item.type,
+      barcode: item.barcode,
+      vehicleModel: item.vehicleModel,
+      partNumber: item.partNumber,
+      defectReasonId: item.defectReasonId,
+      defectReason: item.defectReason
+        ? {
+            id: item.defectReason.id,
+            code: item.defectReason.code,
+            name: item.defectReason.name
+          }
+        : null,
+      isActive: item.isActive
+    };
+  }
+
+  private operatorLabel(operator: Pick<OperatorProfile, 'employeeCode' | 'name'>): string {
+    return [operator.employeeCode, operator.name].filter(Boolean).join(' ') || operator.name;
   }
 
   private get userCounts(): Prisma.UserInclude {

@@ -119,7 +119,7 @@ export function AppShell() {
           <div className="app-topbar__meta" aria-label="当前登录信息">
             <span>{session.user.username}</span>
             <span>{roleLabels[session.user.role]}</span>
-            <span>{session.productionLine.name}</span>
+            <span>{session.user.role === 'INSPECTOR' ? session.productionLine.name : '全部产线'}</span>
           </div>
           <div className="app-topbar__actions">
             <div className="segmented-control" aria-label="主题">

@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
-import { ProductionLine, User } from '@prisma/client';
+import { ProductionLine, Role, User } from '@prisma/client';
 import { ProductionLinesService } from '../production-lines/production-lines.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { UsersService } from '../users/users.service';
@@ -42,11 +42,22 @@ export class AuthService {
       });
     }
 
-    const productionLine = await this.productionLines.findActiveById(dto.productionLineId);
+    const productionLineId = dto.productionLineId?.trim();
+    if (!productionLineId && user.role === Role.INSPECTOR) {
+      throw new ForbiddenException({
+        code: 'PRODUCTION_LINE_REQUIRED',
+        message: '检验员登录必须选择产线'
+      });
+    }
+
+    const productionLine = productionLineId
+      ? await this.productionLines.findActiveById(productionLineId)
+      : await this.productionLines.findDefaultActive();
+
     if (!productionLine) {
       throw new ForbiddenException({
         code: 'PRODUCTION_LINE_INACTIVE',
-        message: '产线不可用'
+        message: productionLineId ? '产线不可用' : '没有可用产线'
       });
     }
 

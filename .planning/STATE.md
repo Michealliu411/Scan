@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: post-v1-baseline-ready
-status: Post-v1 baseline aligned; next milestone framing pending
-last_updated: "2026-05-18T12:00:12+08:00"
+current_phase: post-v1-trial-run-hardening
+status: Trial-run feedback implemented; verification passing locally
+last_updated: "2026-05-25T09:00:00+08:00"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -16,7 +16,7 @@ progress:
 # Project State: Workshop Inspection Scan Statistics System
 
 **Initialized:** 2026-05-06
-**Current phase:** Post-v1 baseline ready
+**Current phase:** Post-v1 trial-run hardening
 **Workflow mode:** Interactive
 
 ## Project Reference
@@ -24,7 +24,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-18)
 
 **Core value:** Inspection stations can quickly and reliably record scan results, enforce duplicate rules, and produce trustworthy Beijing-time daily/monthly quality statistics by workshop, production line, and part number.
-**Current focus:** Prepare a clean Windows intranet deployment package for the target server at `192.168.1.144`, with reset baseline data limited to the administrator account and default production line.
+**Current focus:** Close trial-run feedback around master-data auditability, query pagination, unqualified-reason correction, modal ergonomics, and dirty-barcode reliability before the next Windows package.
 
 ## Current Decisions
 
@@ -60,6 +60,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - Defect reasons and production lines support active-state toggling from master data lists.
 - Dashboard production-line monthly totals are shown as a grouped bar chart instead of the previous middle summary table.
 - Trial-run feedback added larger equal-sized operation buttons, current-day default query dates, Excel-only exports, independent operator profiles with Excel import, unqualified-inspection operator selection by pinyin initials, and defect-code deduction amounts with unqualified deduction totals.
+- Follow-up trial-run hardening added master-data operation audit logs, local master-data search, employee-code operator ordering, detail/operation pagination with a 200-row cap, editable unqualified reasons in detail query, fixed-footer reason dialogs for long reason lists, and automatic restoration of the built-in dirty-barcode reason.
+- The Windows package baseline database now includes the 42 active production defect reasons A0-A41, plus the system dirty-barcode reason `BARCODE_DAMAGED/条码污损`.
+- Login production-line selection is role-aware: inspectors must select an active production line, while administrators and query users can login without selecting one and see all-line context.
 
 ## Roadmap Position
 
@@ -129,9 +132,12 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - 2026-05-18: Captured offline-server packaging constraint: update packages should avoid server-side network access by default, and any unavoidable online/dependency/migration requirement must be surfaced during packaging.
 - 2026-05-18: Implemented trial-run feedback covering larger equal operation buttons, today-default query dates, Excel exports, operator profiles/import/search, and defect-code deduction amounts.
 - 2026-05-18: Reset the local packaged SQLite baseline to only `admin` and `LINE-01/产线01`, built the app for API base `http://192.168.1.144:3000`, and produced `releases/scan-windows-20260518-120012.zip`.
+- 2026-05-25: Implemented follow-up trial-run hardening: generic operation logs for master data and inspection corrections, safe delete behavior without audit-log foreign keys, unqualified-reason editing, detail/log pagination, master-data local search, modal create flows, dirty-barcode built-in reason auto-restore, and long reason-list dialog layout.
+- 2026-05-25: Updated the clean Windows package baseline database to include 42 active production defect reasons A0-A41 while retaining `BARCODE_DAMAGED/条码污损` for dirty-barcode workflows.
+- 2026-05-25: Adjusted login so administrators and query users do not need to choose a production line, while inspectors remain required to select one.
 
 ## Session Continuity
 
-Last session: 2026-05-18T09:04:11+08:00
-Stopped at: Post-v1 baseline aligned in planning docs; next-stage direction ready to discuss or formalize.
+Last session: 2026-05-25T09:00:00+08:00
+Stopped at: Trial-run hardening implemented and locally verified; next step is packaging or field UAT.
 Resume file: none required unless opening the next milestone workflow.

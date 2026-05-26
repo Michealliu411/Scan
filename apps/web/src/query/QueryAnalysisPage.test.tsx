@@ -7,7 +7,8 @@ import {
   fetchDetailRecords,
   fetchQueryDefectReasons,
   fetchQueryProductionLines,
-  reclassifyInspectionRecord
+  reclassifyInspectionRecord,
+  updateUnqualifiedRecordReasons
 } from './query-api';
 
 const chartDisposeMock = vi.fn();
@@ -28,7 +29,8 @@ vi.mock('./query-api', () => ({
   fetchDetailRecords: vi.fn(),
   fetchQueryDefectReasons: vi.fn(),
   fetchQueryProductionLines: vi.fn(),
-  reclassifyInspectionRecord: vi.fn()
+  reclassifyInspectionRecord: vi.fn(),
+  updateUnqualifiedRecordReasons: vi.fn()
 }));
 
 const fetchDashboardMock = vi.mocked(fetchDashboard);
@@ -37,6 +39,7 @@ const fetchDetailRecordsMock = vi.mocked(fetchDetailRecords);
 const fetchQueryDefectReasonsMock = vi.mocked(fetchQueryDefectReasons);
 const fetchQueryProductionLinesMock = vi.mocked(fetchQueryProductionLines);
 const reclassifyInspectionRecordMock = vi.mocked(reclassifyInspectionRecord);
+const updateUnqualifiedRecordReasonsMock = vi.mocked(updateUnqualifiedRecordReasons);
 
 describe('QueryAnalysisPage', () => {
   beforeEach(() => {
@@ -81,7 +84,9 @@ describe('QueryAnalysisPage', () => {
       unqualifiedPartDistribution: [{ partNumber: 'PN-A', unqualified: 1 }]
     });
     fetchDetailRecordsMock.mockResolvedValue({
-      limit: 200,
+      page: 1,
+      pageSize: 50,
+      total: 2,
       records: [
         {
           id: 'record-1',
@@ -108,16 +113,24 @@ describe('QueryAnalysisPage', () => {
       ]
     });
     fetchInspectionRecordChangeLogsMock.mockResolvedValue({
-      limit: 200,
+      page: 1,
+      pageSize: 50,
+      total: 1,
       logs: [
         {
           id: 'log-1',
           inspectionRecordId: 'record-qualified',
+          module: 'inspection',
+          action: 'RECLASSIFY_UNQUALIFIED',
+          targetType: 'inspectionRecord',
+          targetLabel: 'DETAIL-QUALIFIED',
           operatedAt: '2026-05-20T10:00:00.000Z',
           barcode: 'DETAIL-QUALIFIED',
           partNumber: 'PN-Q',
           previousResult: 'QUALIFIED',
           newResult: 'UNQUALIFIED',
+          before: null,
+          after: null,
           defectReasons: [{ id: 'reason-1', code: 'SCRATCH', name: '划伤' }],
           operator: { id: 'query-user', username: 'query' }
         }
@@ -130,6 +143,17 @@ describe('QueryAnalysisPage', () => {
       barcode: 'DETAIL-QUALIFIED',
       vehicleModel: '车型-Q',
       partNumber: 'PN-Q',
+      result: 'UNQUALIFIED',
+      defectReasons: [{ id: 'reason-1', code: 'SCRATCH', name: '划伤' }],
+      inspector: { id: 'user-1', username: 'inspector' }
+    });
+    updateUnqualifiedRecordReasonsMock.mockResolvedValue({
+      id: 'record-1',
+      scannedAt: '2026-05-20T08:00:00.000Z',
+      productionLine: { id: 'line-1', code: 'LINE-01', name: '一号线' },
+      barcode: 'DETAIL-NEWEST',
+      vehicleModel: '车型-A',
+      partNumber: 'PN-ALPHA',
       result: 'UNQUALIFIED',
       defectReasons: [{ id: 'reason-1', code: 'SCRATCH', name: '划伤' }],
       inspector: { id: 'user-1', username: 'inspector' }
@@ -223,7 +247,9 @@ describe('QueryAnalysisPage', () => {
         barcode: 'DETAIL',
         partNumber: 'PN-ALPHA',
         result: 'UNQUALIFIED',
-        defectReasonId: 'reason-1'
+        defectReasonId: 'reason-1',
+        page: 1,
+        pageSize: 50
       });
     });
 
@@ -266,6 +292,26 @@ describe('QueryAnalysisPage', () => {
     });
   });
 
+  it('updates defect reasons for an unqualified detail record', async () => {
+    render(<QueryAnalysisPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '明细查询' }));
+    fireEvent.click(screen.getByRole('button', { name: /查询/ }));
+
+    const table = await screen.findByRole('table', { name: '明细查询结果' });
+    const unqualifiedRow = within(table).getByText('DETAIL-NEWEST').closest('tr');
+    expect(unqualifiedRow).toBeTruthy();
+    fireEvent.click(within(unqualifiedRow as HTMLTableRowElement).getByRole('button', { name: '修改原因' }));
+
+    const dialog = await screen.findByRole('dialog', { name: '修改不合格原因：DETAIL-NEWEST' });
+    fireEvent.click(within(dialog).getByRole('button', { name: '保存原因' }));
+
+    await waitFor(() => {
+      expect(updateUnqualifiedRecordReasonsMock).toHaveBeenCalledWith('record-1', ['reason-1']);
+      expect(fetchDetailRecordsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('queries inspection record change logs from the operation record tab', async () => {
     render(<QueryAnalysisPage />);
 
@@ -281,7 +327,9 @@ describe('QueryAnalysisPage', () => {
         startDate: '2026-05-01',
         endDate: '2026-05-31',
         barcode: 'DETAIL',
-        operatorUsername: 'query'
+        operatorUsername: 'query',
+        page: 1,
+        pageSize: 50
       });
     });
 

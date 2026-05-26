@@ -53,11 +53,21 @@ describe('Auth session flow', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const changeLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260511095143_add_inspection_record_change_log/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: changeLogMigrationSql });
     const operatorMigrationSql = await readFile(
       join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
+    const operationLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260525090000_add_operation_logs/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -180,6 +190,48 @@ describe('Auth session flow', () => {
       .expect(201);
 
     expect(response.body.user.mustChangePassword).toBe(true);
+  });
+
+  it('allows administrator and query users to login without selecting a production line', async () => {
+    const adminResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        username: 'admin',
+        password: 'admin'
+      })
+      .expect(201);
+
+    expect(adminResponse.body.productionLine).toMatchObject({
+      id: productionLineId,
+      code: 'LINE-AUTH',
+      name: '认证测试产线'
+    });
+
+    const queryResponse = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        username: 'query',
+        password: 'correct-password'
+      })
+      .expect(201);
+
+    expect(queryResponse.body.productionLine).toMatchObject({
+      id: productionLineId,
+      code: 'LINE-AUTH',
+      name: '认证测试产线'
+    });
+  });
+
+  it('still requires inspectors to select a production line', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        username: 'inspector',
+        password: 'correct-password'
+      })
+      .expect(403);
+
+    expect(response.body.code).toBe('PRODUCTION_LINE_REQUIRED');
   });
 
   it('changes first-login password and clears mustChangePassword', async () => {

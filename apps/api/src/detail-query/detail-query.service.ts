@@ -13,6 +13,8 @@ type DetailQueryParams = {
   partNumber?: string;
   result?: string;
   defectReasonId?: string;
+  page?: string;
+  pageSize?: string;
 };
 
 type DetailRecord = Prisma.InspectionRecordGetPayload<{
@@ -28,20 +30,19 @@ type DetailRecord = Prisma.InspectionRecordGetPayload<{
   };
 }>;
 
-type ChangeLogRecord = Prisma.InspectionRecordChangeLogGetPayload<{
-  include: {
-    operator: true;
-  };
-}>;
+type ChangeLogRecord = Prisma.OperationLogGetPayload<object>;
 
 type ChangeLogQueryParams = {
   startDate?: string;
   endDate?: string;
   barcode?: string;
   operatorUsername?: string;
+  page?: string;
+  pageSize?: string;
 };
 
-const DETAIL_QUERY_LIMIT = 200;
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
 
 @Injectable()
 export class DetailQueryService {
@@ -52,42 +53,50 @@ export class DetailQueryService {
     const result = this.resolveResult(query.result);
     const productionLineId = query.productionLineId?.trim() || undefined;
     const defectReasonId = query.defectReasonId?.trim() || undefined;
-
-    const records = await this.prisma.inspectionRecord.findMany({
-      where: {
-        scannedAt: {
-          gte: startUtc,
-          lt: endUtc
-        },
-        ...(productionLineId ? { productionLineId } : {}),
-        ...(query.barcode?.trim() ? { barcode: { contains: query.barcode.trim() } } : {}),
-        ...(query.partNumber?.trim() ? { partNumber: { contains: query.partNumber.trim() } } : {}),
-        ...(result ? { result } : {}),
-        ...(defectReasonId
-          ? {
-              defectReasonLinks: {
-                some: { defectReasonId }
-              }
+    const pagination = resolvePagination(query);
+    const where: Prisma.InspectionRecordWhereInput = {
+      scannedAt: {
+        gte: startUtc,
+        lt: endUtc
+      },
+      ...(productionLineId ? { productionLineId } : {}),
+      ...(query.barcode?.trim() ? { barcode: { contains: query.barcode.trim() } } : {}),
+      ...(query.partNumber?.trim() ? { partNumber: { contains: query.partNumber.trim() } } : {}),
+      ...(result ? { result } : {}),
+      ...(defectReasonId
+        ? {
+            defectReasonLinks: {
+              some: { defectReasonId }
             }
-          : {})
-      },
-      include: {
-        productionLine: true,
-        inspector: true,
-        operatorProfile: true,
-        defectReasonLinks: {
-          include: {
-            defectReason: true
           }
-        }
-      },
-      orderBy: { scannedAt: 'desc' },
-      take: DETAIL_QUERY_LIMIT
-    });
+        : {})
+    };
+
+    const [records, total] = await this.prisma.$transaction([
+      this.prisma.inspectionRecord.findMany({
+        where,
+        include: {
+          productionLine: true,
+          inspector: true,
+          operatorProfile: true,
+          defectReasonLinks: {
+            include: {
+              defectReason: true
+            }
+          }
+        },
+        orderBy: { scannedAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.pageSize
+      }),
+      this.prisma.inspectionRecord.count({ where })
+    ]);
 
     return {
       records: records.map((record) => this.toRecordResponse(record)),
-      limit: DETAIL_QUERY_LIMIT
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total
     };
   }
 
@@ -180,6 +189,130 @@ export class DetailQueryService {
         }
       });
 
+      await tx.operationLog.create({
+        data: {
+          module: 'inspection',
+          action: 'RECLASSIFY_UNQUALIFIED',
+          targetType: 'inspectionRecord',
+          targetId: inspectionRecordId,
+          targetLabel: existing.barcode,
+          barcode: existing.barcode,
+          partNumber: existing.partNumber,
+          previousResult: InspectionResult.QUALIFIED,
+          newResult: InspectionResult.UNQUALIFIED,
+          defectReasonsJson: stringifyDefectReasons(defectReasons),
+          beforeJson: JSON.stringify({
+            result: InspectionResult.QUALIFIED,
+            defectReasons: []
+          }),
+          afterJson: JSON.stringify({
+            result: InspectionResult.UNQUALIFIED,
+            defectReasons: toDefectReasonSnapshots(defectReasons),
+            deductionAmount
+          }),
+          operatorId: auth.user.id,
+          operatorUsername: auth.user.username
+        }
+      });
+
+      return record;
+    });
+
+    return this.toRecordResponse(updated);
+  }
+
+  async updateUnqualifiedRecordReasons(
+    auth: ActiveSessionContext,
+    inspectionRecordId: string,
+    dto: ReclassifyInspectionRecordDto
+  ) {
+    const defectReasons = await this.resolveActiveDefectReasons(dto.defectReasonIds ?? []);
+    const deductionAmount = defectReasons.reduce((total, reason) => total + reason.deductionAmount.toNumber(), 0);
+    const existing = await this.prisma.inspectionRecord.findUnique({
+      where: { id: inspectionRecordId },
+      include: {
+        defectReasonLinks: {
+          include: {
+            defectReason: true
+          }
+        }
+      }
+    });
+
+    if (!existing) {
+      throw new NotFoundException({
+        code: 'INSPECTION_RECORD_NOT_FOUND',
+        message: '检验记录不存在'
+      });
+    }
+
+    if (existing.result !== InspectionResult.UNQUALIFIED) {
+      throw new ConflictException({
+        code: 'INSPECTION_RECORD_NOT_UNQUALIFIED',
+        message: '只有不合格记录可以修改缺陷原因'
+      });
+    }
+
+    const previousDefectReasons = existing.defectReasonLinks.map((link) => ({
+      id: link.defectReason.id,
+      code: link.defectReason.code,
+      name: link.defectReason.name
+    }));
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.inspectionRecordDefectReason.deleteMany({
+        where: { inspectionRecordId }
+      });
+
+      await tx.inspectionRecordDefectReason.createMany({
+        data: defectReasons.map((reason) => ({
+          inspectionRecordId,
+          defectReasonId: reason.id
+        }))
+      });
+
+      const record = await tx.inspectionRecord.update({
+        where: { id: inspectionRecordId },
+        data: { deductionAmount },
+        include: {
+          productionLine: true,
+          inspector: true,
+          operatorProfile: true,
+          defectReasonLinks: {
+            include: {
+              defectReason: true
+            }
+          }
+        }
+      });
+
+      await tx.operationLog.create({
+        data: {
+          module: 'inspection',
+          action: 'UPDATE_UNQUALIFIED_REASONS',
+          targetType: 'inspectionRecord',
+          targetId: inspectionRecordId,
+          targetLabel: existing.barcode,
+          barcode: existing.barcode,
+          partNumber: existing.partNumber,
+          previousResult: InspectionResult.UNQUALIFIED,
+          newResult: InspectionResult.UNQUALIFIED,
+          defectReasonsJson: stringifyDefectReasons(defectReasons),
+          beforeJson: JSON.stringify({
+            result: InspectionResult.UNQUALIFIED,
+            defectReasons: previousDefectReasons,
+            deductionAmount: existing.deductionAmount.toNumber()
+          }),
+          afterJson: JSON.stringify({
+            result: InspectionResult.UNQUALIFIED,
+            defectReasons: toDefectReasonSnapshots(defectReasons),
+            deductionAmount
+          }),
+          operatorId: auth.user.id,
+          operatorUsername: auth.user.username
+        }
+      });
+
       return record;
     });
 
@@ -190,32 +323,31 @@ export class DetailQueryService {
     const { startUtc, endUtc } = this.resolveDateRange(query);
     const barcode = query.barcode?.trim() || undefined;
     const operatorUsername = query.operatorUsername?.trim() || undefined;
+    const pagination = resolvePagination(query);
+    const where: Prisma.OperationLogWhereInput = {
+      operatedAt: {
+        gte: startUtc,
+        lt: endUtc
+      },
+      ...(barcode ? { barcode: { contains: barcode } } : {}),
+      ...(operatorUsername ? { operatorUsername: { contains: operatorUsername } } : {})
+    };
 
-    const logs = await this.prisma.inspectionRecordChangeLog.findMany({
-      where: {
-        operatedAt: {
-          gte: startUtc,
-          lt: endUtc
-        },
-        ...(barcode ? { barcode: { contains: barcode } } : {}),
-        ...(operatorUsername
-          ? {
-              operator: {
-                username: { contains: operatorUsername }
-              }
-            }
-          : {})
-      },
-      include: {
-        operator: true
-      },
-      orderBy: { operatedAt: 'desc' },
-      take: DETAIL_QUERY_LIMIT
-    });
+    const [logs, total] = await this.prisma.$transaction([
+      this.prisma.operationLog.findMany({
+        where,
+        orderBy: { operatedAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.pageSize
+      }),
+      this.prisma.operationLog.count({ where })
+    ]);
 
     return {
       logs: logs.map((log) => this.toChangeLogResponse(log)),
-      limit: DETAIL_QUERY_LIMIT
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      total
     };
   }
 
@@ -331,19 +463,50 @@ export class DetailQueryService {
   private toChangeLogResponse(log: ChangeLogRecord) {
     return {
       id: log.id,
-      inspectionRecordId: log.inspectionRecordId,
+      inspectionRecordId: log.targetType === 'inspectionRecord' ? log.targetId : null,
       barcode: log.barcode,
       partNumber: log.partNumber,
       previousResult: log.previousResult,
       newResult: log.newResult,
       operatedAt: log.operatedAt.toISOString(),
       operator: {
-        id: log.operator.id,
-        username: log.operator.username
+        id: log.operatorId,
+        username: log.operatorUsername
       },
-      defectReasons: parseDefectReasonsJson(log.defectReasonsJson)
+      module: log.module,
+      action: log.action,
+      targetType: log.targetType,
+      targetLabel: log.targetLabel,
+      defectReasons: parseDefectReasonsJson(log.defectReasonsJson ?? '[]'),
+      before: parseJsonObject(log.beforeJson),
+      after: parseJsonObject(log.afterJson)
     };
   }
+}
+
+function resolvePagination(query: { page?: string; pageSize?: string }): { page: number; pageSize: number; skip: number } {
+  const page = Math.max(1, Number.parseInt(query.page ?? '1', 10) || 1);
+  const requestedPageSize = Number.parseInt(query.pageSize ?? String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE;
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, requestedPageSize));
+  return {
+    page,
+    pageSize,
+    skip: (page - 1) * pageSize
+  };
+}
+
+function toDefectReasonSnapshots(
+  reasons: Array<{ id: string; code: string; name: string }>
+): Array<{ id: string; code: string; name: string }> {
+  return reasons.map((reason) => ({
+    id: reason.id,
+    code: reason.code,
+    name: reason.name
+  }));
+}
+
+function stringifyDefectReasons(reasons: Array<{ id: string; code: string; name: string }>): string {
+  return JSON.stringify(toDefectReasonSnapshots(reasons));
 }
 
 function parseDefectReasonsJson(value: string): Array<{ id: string; code: string; name: string }> {
@@ -362,4 +525,16 @@ function parseDefectReasonsJson(value: string): Array<{ id: string; code: string
       ? [{ id: reason.id, code: reason.code, name: reason.name }]
       : [];
   });
+}
+
+function parseJsonObject(value: string | null): unknown {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }

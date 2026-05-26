@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>生产订单日计划与完成监督规格说明书</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --paper: #ffffff;
+      --text: #1f2937;
+      --muted: #667085;
+      --line: #d9dee7;
+      --accent: #0f766e;
+      --accent-soft: #e6f4f1;
+      --warn: #a16207;
+      --warn-soft: #fff7dc;
+      --danger: #b42318;
+      --danger-soft: #fff1f0;
+      --code: #f3f4f6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 32px 20px 56px;
+    }
+
+    .document {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+    }
+
+    header {
+      padding: 32px 36px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 30px;
+      line-height: 1.25;
+    }
+
+    .subtitle {
+      max-width: 860px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      padding: 18px 36px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    .meta div {
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .meta span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .meta strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 14px;
+      word-break: break-word;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 0;
+    }
+
+    nav {
+      padding: 24px 20px;
+      border-right: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    nav h2 {
+      margin: 0 0 12px;
+      font-size: 14px;
+    }
+
+    nav a {
+      display: block;
+      padding: 7px 0;
+      color: var(--text);
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    nav a:hover {
+      color: var(--accent);
+    }
+
+    .content {
+      padding: 28px 36px 40px;
+    }
+
+    section {
+      margin: 0 0 34px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+      line-height: 1.35;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 17px;
+      line-height: 1.4;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 14px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fafc;
+      font-weight: 700;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: var(--code);
+    }
+
+    pre {
+      overflow: auto;
+      margin: 12px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--code);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .callout {
+      margin: 14px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent-soft);
+    }
+
+    .callout.warning {
+      border-left-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .status-card {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .status-card strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--accent);
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 860px) {
+      .meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      main {
+        display: block;
+      }
+
+      nav {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      .page {
+        max-width: none;
+        padding: 0;
+      }
+
+      .document {
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      nav {
+        display: none;
+      }
+
+      main {
+        display: block;
+      }
+
+      section {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <article class="document">
+      <header>
+        <p class="eyebrow">规格说明书 / 意向稿</p>
+        <h1>生产订单日计划与完成监督</h1>
+        <p class="subtitle">基于现有水洗唛扫码查询生产订单能力，扩展车间共享日计划下达、检验扫码计划校验、今日明细计划展示和订单维度完成统计。</p>
+      </header>
+
+      <div class="meta">
+        <div>
+          <span>文档状态</span>
+          <strong>讨论规格，不代表已批准实施</strong>
+        </div>
+        <div>
+          <span>生成日期</span>
+          <strong>2026-05-26</strong>
+        </div>
+        <div>
+          <span>适用系统</span>
+          <strong>车间检验扫描统计系统</strong>
+        </div>
+        <div>
+          <span>计划口径</span>
+          <strong>车间共享，不拆产线</strong>
+        </div>
+      </div>
+
+      <main>
+        <nav aria-label="目录">
+          <h2>目录</h2>
+          <a href="#background">1. 背景</a>
+          <a href="#goals">2. 核心目标</a>
+          <a href="#scope">3. 业务口径</a>
+          <a href="#module">4. 新增模块</a>
+          <a href="#scan-rules">5. 检验扫码控制</a>
+          <a href="#inspection-ui">6. 检验页面调整</a>
+          <a href="#analytics">7. 查询分析调整</a>
+          <a href="#data-model">8. 数据模型建议</a>
+          <a href="#permissions">9. 权限建议</a>
+          <a href="#audit">10. 操作记录</a>
+          <a href="#questions">11. 待确认问题</a>
+          <a href="#mvp">12. 第一版范围</a>
+        </nav>
+
+        <div class="content">
+          <section id="background">
+            <h2>1. 背景</h2>
+            <p>当前系统已经通过水洗唛扫码接口获取生产订单相关信息，并完成检验扫码、合格/不合格记录、查询分析等能力。</p>
+            <p>后续需求方向是将系统向前延伸：每天先扫描水洗唛获取订单信息，再填写当日计划生产数并下达给车间。检验员后续扫码检验时，系统根据当日订单计划监督现场完成情况。</p>
+            <div class="callout warning">
+              本文档是意向性规格说明书，不是正式 PCR，也不是已批准开发范围。
+            </div>
+          </section>
+
+          <section id="goals">
+            <h2>2. 核心目标</h2>
+            <ul>
+              <li>建立“北京自然日 + 生产订单”的车间共享日计划。</li>
+              <li>检验扫码时校验订单是否属于今日已下达计划。</li>
+              <li>只控制合格完成数，不限制不合格记录。</li>
+              <li>查询分析中增加订单维度的当日完成情况。</li>
+            </ul>
+          </section>
+
+          <section id="scope">
+            <h2>3. 业务口径</h2>
+            <h3>3.1 计划范围</h3>
+            <p>第一版按车间共享计划池处理，不拆分到具体产线。</p>
+            <ul>
+              <li>现场产线之间可能临时调配人员、产能和订单。</li>
+              <li>如果计划拆到产线，发生调整时需要频繁释放、转移或重下达，维护成本较高。</li>
+              <li>车间共享计划更适合先实现监督目标，保留现场调度弹性。</li>
+            </ul>
+
+            <h3>3.2 日计划唯一性</h3>
+            <p>同一北京自然日、同一生产订单，只允许存在一条有效计划。</p>
+            <pre>planDate + productionOrderNo</pre>
+
+            <h3>3.3 今日计划数</h3>
+            <p>今日计划数代表当天该订单允许完成的合格数量上限。</p>
+            <ul>
+              <li>今日计划数必须大于 0。</li>
+              <li>今日计划数不能大于订单总数量。</li>
+              <li>今日计划数可以小于订单总数量，因为同一订单可能分多天生产。</li>
+              <li>管理员或计划人员可以调整今日计划数，调整动作需要进入操作记录。</li>
+            </ul>
+          </section>
+
+          <section id="module">
+            <h2>4. 新增功能模块</h2>
+            <h3>4.1 模块命名</h3>
+            <p>新增菜单建议命名为 <code>生产计划</code> 或 <code>订单计划</code>。</p>
+
+            <h3>4.2 主要流程</h3>
+            <ol>
+              <li>用户扫描或输入水洗唛。</li>
+              <li>系统调用现有生产订单接口。</li>
+              <li>系统展示订单信息。</li>
+              <li>用户填写今日计划生产数。</li>
+              <li>用户保存并下达当日车间计划。</li>
+            </ol>
+
+            <h3>4.3 页面展示字段</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>生产订单号</td><td>来自水洗唛生产订单接口。</td></tr>
+                <tr><td>成品零件编号</td><td>用于检验记录、查询分析和订单完成统计。</td></tr>
+                <tr><td>成品产品名称</td><td>用于现场识别订单。</td></tr>
+                <tr><td>订单数量</td><td>接口返回的订单总数量。</td></tr>
+                <tr><td>今日计划数</td><td>用户填写，当日合格数量控制上限。</td></tr>
+                <tr><td>已下达状态</td><td>标识计划是否有效。</td></tr>
+                <tr><td>创建/修改信息</td><td>用于审计追溯。</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="scan-rules">
+            <h2>5. 检验扫码控制规则</h2>
+            <h3>5.1 没有今日计划</h3>
+            <p>如果扫码解析出的生产订单当天没有有效计划：</p>
+            <ul>
+              <li>禁止录入合格。</li>
+              <li>禁止录入不合格。</li>
+              <li>提示：<code>该订单今日未下达生产计划</code>。</li>
+            </ul>
+            <p>原因：没有下达计划代表今天不应接收该订单的检验记录。如现场确实临时生产，应先补下达今日计划。</p>
+
+            <h3>5.2 有今日计划</h3>
+            <ul>
+              <li>允许录入不合格。</li>
+              <li>合格录入需要检查今日合格完成数。</li>
+              <li>合格完成数未达到今日计划数时，允许提交合格。</li>
+              <li>合格完成数达到今日计划数后，禁止继续提交合格。</li>
+            </ul>
+            <div class="callout danger">
+              合格超计划拦截提示建议：该订单今日计划已完成，不能继续录入合格品。
+            </div>
+
+            <h3>5.3 不合格记录</h3>
+            <ul>
+              <li>不合格不计入完成数。</li>
+              <li>不合格不减少剩余计划数。</li>
+              <li>即使合格完成数已经达到今日计划数，仍允许继续录入不合格。</li>
+              <li>查询分析中单独统计不合格数量和原因。</li>
+            </ul>
+
+            <h3>5.4 合格完成数</h3>
+            <pre>same planDate
++ same productionOrderNo
++ result = QUALIFIED</pre>
+            <p>如果当前系统已有“同一条码合格后不可重复录入”的规则，该规则继续保留。</p>
+          </section>
+
+          <section id="inspection-ui">
+            <h2>6. 检验页面展示调整</h2>
+            <p>在检验员扫码后，当前订单区域建议展示：</p>
+            <ul>
+              <li>生产订单号</li>
+              <li>订单数量</li>
+              <li>今日计划数</li>
+              <li>今日合格完成数</li>
+              <li>今日剩余数</li>
+              <li>完成率</li>
+            </ul>
+            <pre>今日计划：500
+已完成：320
+剩余：180</pre>
+            <p>今日检验明细中仍保留产线字段，用于追溯实际由哪条产线完成。</p>
+          </section>
+
+          <section id="analytics">
+            <h2>7. 查询分析调整</h2>
+            <p>统计看板新增“今日订单完成情况”。</p>
+            <table>
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>说明</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>生产订单号</td><td>订单维度主键。</td></tr>
+                <tr><td>零件号</td><td>订单对应零件。</td></tr>
+                <tr><td>产品名称</td><td>订单对应产品。</td></tr>
+                <tr><td>订单数量</td><td>接口返回总数量。</td></tr>
+                <tr><td>今日计划数</td><td>当日下达数量。</td></tr>
+                <tr><td>合格完成数</td><td>当日合格记录数量。</td></tr>
+                <tr><td>不合格数</td><td>当日不合格记录数量。</td></tr>
+                <tr><td>完成率</td><td>合格完成数 / 今日计划数。</td></tr>
+                <tr><td>参与产线</td><td>当天有记录的产线集合。</td></tr>
+                <tr><td>状态</td><td>未开始、进行中、已完成、有异常。</td></tr>
+              </tbody>
+            </table>
+
+            <div class="status-grid">
+              <div class="status-card">
+                <strong>未开始</strong>
+                合格完成数 = 0，不合格数 = 0
+              </div>
+              <div class="status-card">
+                <strong>进行中</strong>
+                合格完成数大于 0 且小于今日计划数
+              </div>
+              <div class="status-card">
+                <strong>已完成</strong>
+                合格完成数达到今日计划数
+              </div>
+              <div class="status-card">
+                <strong>有异常</strong>
+                存在不合格记录
+              </div>
+            </div>
+            <p>状态可组合展示，例如 <code>已完成 / 有异常</code>。</p>
+          </section>
+
+          <section id="data-model">
+            <h2>8. 数据模型建议</h2>
+            <h3>8.1 生产订单缓存</h3>
+            <p>用于保存接口返回的订单信息，减少重复依赖接口，也便于追溯当时接口返回内容。</p>
+            <pre>ProductionOrderCache
+- id
+- productionOrderNo
+- partNumber
+- productName
+- orderQuantity
+- rawJson
+- fetchedAt
+- updatedAt</pre>
+
+            <h3>8.2 日计划</h3>
+            <pre>DailyProductionPlan
+- id
+- planDate
+- productionOrderNo
+- partNumber
+- productName
+- orderQuantity
+- plannedQuantity
+- status
+- createdBy
+- createdAt
+- updatedBy
+- updatedAt</pre>
+            <p>建议状态：<code>ACTIVE</code>、<code>CLOSED</code>。第一版可以只实现 <code>ACTIVE</code>，后续再扩展关闭计划。</p>
+
+            <h3>8.3 检验记录关联</h3>
+            <pre>InspectionRecord
++ productionOrderNo
++ dailyPlanId</pre>
+            <p><code>dailyPlanId</code> 用于精确关联当时计划，<code>productionOrderNo</code> 用于查询和兼容分析。</p>
+          </section>
+
+          <section id="permissions">
+            <h2>9. 权限建议</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>角色</th>
+                  <th>建议权限</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>管理员</td><td>可以下达、修改、关闭计划。</td></tr>
+                <tr><td>查询用户</td><td>可以查看计划和完成情况。是否允许下达计划待确认。</td></tr>
+                <tr><td>检验员</td><td>不能维护计划，只在检验扫码时看到计划完成信息。</td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section id="audit">
+            <h2>10. 操作记录</h2>
+            <p>正式实施时建议进入操作记录的动作：</p>
+            <ul>
+              <li>新增今日计划。</li>
+              <li>修改今日计划数。</li>
+              <li>关闭今日计划。</li>
+              <li>扫码时因无今日计划被拦截。</li>
+              <li>扫码时因合格数达到计划被拦截。</li>
+            </ul>
+            <div class="callout warning">
+              拦截记录是否进入操作记录需要再评估。如果拦截频率较高，建议只记录业务操作，不记录每次拦截，避免操作记录噪音过大。
+            </div>
+          </section>
+
+          <section id="questions">
+            <h2>11. 待确认问题</h2>
+            <ol>
+              <li>生产订单号在接口返回中的准确字段名。</li>
+              <li>订单数量字段是否稳定存在，单位是什么。</li>
+              <li>同一水洗唛是否可能对应多个生产订单。</li>
+              <li>今日计划是否允许跨天复制。</li>
+              <li>今日计划是否允许关闭。</li>
+              <li>查询用户是否可以下达计划，还是只能管理员下达。</li>
+              <li>拦截记录是否需要进入操作记录。</li>
+            </ol>
+          </section>
+
+          <section id="mvp">
+            <h2>12. 推荐第一版范围</h2>
+            <h3>第一版包含</h3>
+            <ul>
+              <li>新增订单计划菜单。</li>
+              <li>扫码查询订单并下达今日计划。</li>
+              <li>检验扫码按今日订单计划拦截。</li>
+              <li>合格完成数不能超过今日计划数。</li>
+              <li>不合格不占用计划数，计划完成后仍允许录入不合格。</li>
+              <li>今日检验页显示计划数、完成数、剩余数。</li>
+              <li>查询分析增加今日订单完成情况。</li>
+            </ul>
+
+            <h3>第一版暂不包含</h3>
+            <ul>
+              <li>产线级计划分配。</li>
+              <li>多日计划排程。</li>
+              <li>自动从 ERP 拉取全部订单。</li>
+              <li>复杂计划审批流。</li>
+              <li>计划释放/转移流程。</li>
+            </ul>
+          </section>
+
+          <p class="footer-note">本文档由讨论稿整理生成，后续进入开发前应转换为正式 PCR 与实施计划。</p>
+        </div>
+      </main>
+    </article>
+  </div>
+</body>
+</html>

@@ -38,7 +38,7 @@ describe('App', () => {
     render(<App />);
 
     expect(await screen.findByText('admin')).toBeTruthy();
-    expect(screen.getByText('一号产线')).toBeTruthy();
+    expect(screen.getByText('全部产线')).toBeTruthy();
   });
 
   it('ignores an invalid auth/me payload instead of crashing', async () => {
@@ -51,6 +51,6 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('请选择产线并登录')).toBeTruthy();
+    expect(await screen.findByText('检验员请选择产线，管理员和查询用户可直接登录')).toBeTruthy();
   });
 });

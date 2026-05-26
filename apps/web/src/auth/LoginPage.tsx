@@ -57,8 +57,8 @@ export function LoginPage({ onLoginComplete }: LoginPageProps) {
   }, []);
 
   const canSubmit = useMemo(
-    () => Boolean(username.trim() && password && productionLineId && !isLoadingLines && !isSubmitting),
-    [username, password, productionLineId, isLoadingLines, isSubmitting]
+    () => Boolean(username.trim() && password && !isSubmitting),
+    [username, password, isSubmitting]
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -75,11 +75,11 @@ export function LoginPage({ onLoginComplete }: LoginPageProps) {
     try {
       const session = await apiFetch<AuthSession>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({
-          username: username.trim(),
-          password,
-          productionLineId
-        }),
+          body: JSON.stringify({
+            username: username.trim(),
+            password,
+            ...(productionLineId ? { productionLineId } : {})
+          }),
         skipSessionExpiredHandler: true
       });
 
@@ -101,7 +101,7 @@ export function LoginPage({ onLoginComplete }: LoginPageProps) {
         </div>
         <header className="login-header">
           <h1 id="login-title">车间检验扫描统计系统</h1>
-          <p>请选择产线并登录</p>
+          <p>检验员请选择产线，管理员和查询用户可直接登录</p>
         </header>
 
         {auth.sessionExpiredNotice ? <Alert variant="error">{auth.sessionExpiredNotice}</Alert> : null}
@@ -131,7 +131,7 @@ export function LoginPage({ onLoginComplete }: LoginPageProps) {
             disabled={productionLines.length === 0}
             onChange={(event) => setProductionLineId(event.target.value)}
           >
-            <option value="">请选择产线</option>
+            <option value="">不选择产线</option>
             {productionLines.map((line) => (
               <option key={line.id} value={line.id}>
                 {line.name}

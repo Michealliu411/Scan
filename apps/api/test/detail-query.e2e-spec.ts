@@ -43,6 +43,11 @@ describe('Detail query API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
+    const operationLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260525090000_add_operation_logs/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -61,6 +66,7 @@ describe('Detail query API', () => {
 
   beforeEach(async () => {
     await prisma.session.deleteMany();
+    await prisma.operationLog.deleteMany();
     await prisma.inspectionRecordChangeLog.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
@@ -240,7 +246,7 @@ describe('Detail query API', () => {
     });
     expect(response.body.records[0].defectReasons).toHaveLength(2);
     expect(response.body.records[0].scannedAt).toEqual('2026-05-20T08:00:00.000Z');
-    expect(response.body.limit).toBe(200);
+    expect(response.body).toMatchObject({ page: 1, pageSize: 50, total: 2 });
   });
 
   it('filters detail records by production line, barcode, part number, result, and defect reason', async () => {
@@ -313,6 +319,7 @@ describe('Detail query API', () => {
     expect(logs.body.logs).toHaveLength(1);
     expect(logs.body.logs[0]).toMatchObject({
       inspectionRecordId: qualified.id,
+      action: 'RECLASSIFY_UNQUALIFIED',
       barcode: 'DETAIL-QUALIFIED',
       partNumber: 'PN-BETA',
       previousResult: InspectionResult.QUALIFIED,
@@ -320,7 +327,48 @@ describe('Detail query API', () => {
       operator: { username: 'query' },
       defectReasons: [{ id: scratchReasonId, code: 'SCRATCH', name: '划伤' }]
     });
-    expect(logs.body.limit).toBe(200);
+    expect(logs.body).toMatchObject({ page: 1, pageSize: 50, total: 1 });
+  });
+
+  it('lets query users update defect reasons on an unqualified record and records an operation log', async () => {
+    const query = await login('query');
+    const unqualified = await prisma.inspectionRecord.findFirstOrThrow({
+      where: { barcode: 'DETAIL-NEWEST' }
+    });
+
+    const response = await query
+      .post(`/detail-query/records/${unqualified.id}/update-unqualified-reasons`)
+      .send({ defectReasonIds: [dentReasonId] })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      id: unqualified.id,
+      barcode: 'DETAIL-NEWEST',
+      result: InspectionResult.UNQUALIFIED,
+      defectReasons: [{ id: dentReasonId, code: 'DENT', name: '凹陷' }]
+    });
+
+    const updated = await prisma.inspectionRecord.findUniqueOrThrow({
+      where: { id: unqualified.id },
+      include: { defectReasonLinks: true }
+    });
+    expect(updated.defectReasonLinks.map((link) => link.defectReasonId)).toEqual([dentReasonId]);
+
+    const logs = await query
+      .get('/detail-query/change-logs?startDate=2026-05-01&endDate=2026-05-31&barcode=DETAIL-NEWEST&operatorUsername=query')
+      .expect(200);
+
+    expect(logs.body.logs).toHaveLength(1);
+    expect(logs.body.logs[0]).toMatchObject({
+      inspectionRecordId: unqualified.id,
+      action: 'UPDATE_UNQUALIFIED_REASONS',
+      barcode: 'DETAIL-NEWEST',
+      partNumber: 'PN-ALPHA',
+      previousResult: InspectionResult.UNQUALIFIED,
+      newResult: InspectionResult.UNQUALIFIED,
+      operator: { username: 'query' },
+      defectReasons: [{ id: dentReasonId, code: 'DENT', name: '凹陷' }]
+    });
   });
 
   it('requires defect reasons and a currently qualified record for reclassification', async () => {

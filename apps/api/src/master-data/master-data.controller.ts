@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Role } from '@prisma/client';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { SessionGuard } from '../auth/session.guard';
+import { ActiveSessionContext } from '../sessions/sessions.service';
 import {
   CreateDefectReasonDto,
   CreateManagedUserDto,
@@ -39,27 +41,28 @@ export class MasterDataController {
   }
 
   @Post('users')
-  createUser(@Body() dto: CreateManagedUserDto) {
-    return this.masterData.createUser(dto);
+  createUser(@CurrentUser() auth: ActiveSessionContext, @Body() dto: CreateManagedUserDto) {
+    return this.masterData.createUser(auth, dto);
   }
 
   @Patch('users/:id')
-  updateUser(@Param('id') id: string, @Body() dto: UpdateManagedUserDto) {
-    return this.masterData.updateUser(id, dto);
+  updateUser(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string, @Body() dto: UpdateManagedUserDto) {
+    return this.masterData.updateUser(auth, id, dto);
   }
 
   @Post('users/:id/reset-password')
   async resetUserPassword(
+    @CurrentUser() auth: ActiveSessionContext,
     @Param('id') id: string,
     @Body() dto: ResetManagedUserPasswordDto
   ): Promise<{ ok: true }> {
-    await this.masterData.resetUserPassword(id, dto);
+    await this.masterData.resetUserPassword(auth, id, dto);
     return { ok: true };
   }
 
   @Delete('users/:id')
-  async deleteUser(@Param('id') id: string): Promise<{ ok: true }> {
-    await this.masterData.deleteUser(id);
+  async deleteUser(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteUser(auth, id);
     return { ok: true };
   }
 
@@ -69,18 +72,18 @@ export class MasterDataController {
   }
 
   @Post('defect-reasons')
-  createDefectReason(@Body() dto: CreateDefectReasonDto) {
-    return this.masterData.createDefectReason(dto);
+  createDefectReason(@CurrentUser() auth: ActiveSessionContext, @Body() dto: CreateDefectReasonDto) {
+    return this.masterData.createDefectReason(auth, dto);
   }
 
   @Patch('defect-reasons/:id')
-  updateDefectReason(@Param('id') id: string, @Body() dto: UpdateDefectReasonDto) {
-    return this.masterData.updateDefectReason(id, dto);
+  updateDefectReason(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string, @Body() dto: UpdateDefectReasonDto) {
+    return this.masterData.updateDefectReason(auth, id, dto);
   }
 
   @Delete('defect-reasons/:id')
-  async deleteDefectReason(@Param('id') id: string): Promise<{ ok: true }> {
-    await this.masterData.deleteDefectReason(id);
+  async deleteDefectReason(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteDefectReason(auth, id);
     return { ok: true };
   }
 
@@ -90,23 +93,23 @@ export class MasterDataController {
   }
 
   @Post('operators')
-  createOperator(@Body() dto: CreateOperatorProfileDto) {
-    return this.masterData.createOperatorProfile(dto);
+  createOperator(@CurrentUser() auth: ActiveSessionContext, @Body() dto: CreateOperatorProfileDto) {
+    return this.masterData.createOperatorProfile(auth, dto);
   }
 
   @Post('operators/import')
-  importOperators(@Body() dto: ImportOperatorProfilesDto) {
-    return this.masterData.importOperatorProfiles(dto);
+  importOperators(@CurrentUser() auth: ActiveSessionContext, @Body() dto: ImportOperatorProfilesDto) {
+    return this.masterData.importOperatorProfiles(auth, dto);
   }
 
   @Patch('operators/:id')
-  updateOperator(@Param('id') id: string, @Body() dto: UpdateOperatorProfileDto) {
-    return this.masterData.updateOperatorProfile(id, dto);
+  updateOperator(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string, @Body() dto: UpdateOperatorProfileDto) {
+    return this.masterData.updateOperatorProfile(auth, id, dto);
   }
 
   @Delete('operators/:id')
-  async deleteOperator(@Param('id') id: string): Promise<{ ok: true }> {
-    await this.masterData.deleteOperatorProfile(id);
+  async deleteOperator(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteOperatorProfile(auth, id);
     return { ok: true };
   }
 
@@ -116,18 +119,18 @@ export class MasterDataController {
   }
 
   @Post('production-lines')
-  createProductionLine(@Body() dto: CreateProductionLineDto) {
-    return this.masterData.createProductionLine(dto);
+  createProductionLine(@CurrentUser() auth: ActiveSessionContext, @Body() dto: CreateProductionLineDto) {
+    return this.masterData.createProductionLine(auth, dto);
   }
 
   @Patch('production-lines/:id')
-  updateProductionLine(@Param('id') id: string, @Body() dto: UpdateProductionLineDto) {
-    return this.masterData.updateProductionLine(id, dto);
+  updateProductionLine(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string, @Body() dto: UpdateProductionLineDto) {
+    return this.masterData.updateProductionLine(auth, id, dto);
   }
 
   @Delete('production-lines/:id')
-  async deleteProductionLine(@Param('id') id: string): Promise<{ ok: true }> {
-    await this.masterData.deleteProductionLine(id);
+  async deleteProductionLine(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteProductionLine(auth, id);
     return { ok: true };
   }
 
@@ -142,18 +145,18 @@ export class MasterDataController {
   }
 
   @Post('special-barcodes')
-  createSpecialBarcode(@Body() dto: CreateSpecialBarcodeDto) {
-    return this.masterData.createSpecialBarcode(dto);
+  createSpecialBarcode(@CurrentUser() auth: ActiveSessionContext, @Body() dto: CreateSpecialBarcodeDto) {
+    return this.masterData.createSpecialBarcode(auth, dto);
   }
 
   @Patch('special-barcodes/:id')
-  updateSpecialBarcode(@Param('id') id: string, @Body() dto: UpdateSpecialBarcodeDto) {
-    return this.masterData.updateSpecialBarcode(id, dto);
+  updateSpecialBarcode(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string, @Body() dto: UpdateSpecialBarcodeDto) {
+    return this.masterData.updateSpecialBarcode(auth, id, dto);
   }
 
   @Delete('special-barcodes/:id')
-  async deleteSpecialBarcode(@Param('id') id: string): Promise<{ ok: true }> {
-    await this.masterData.deleteSpecialBarcode(id);
+  async deleteSpecialBarcode(@CurrentUser() auth: ActiveSessionContext, @Param('id') id: string): Promise<{ ok: true }> {
+    await this.masterData.deleteSpecialBarcode(auth, id);
     return { ok: true };
   }
 }

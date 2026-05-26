@@ -11,7 +11,8 @@ import {
   fetchDetailRecords,
   fetchQueryDefectReasons,
   fetchQueryProductionLines,
-  reclassifyInspectionRecord
+  reclassifyInspectionRecord,
+  updateUnqualifiedRecordReasons
 } from './query-api';
 import {
   ChangeLogFilters,
@@ -47,18 +48,24 @@ export function QueryAnalysisPage() {
     barcode: '',
     partNumber: '',
     result: '',
-    defectReasonId: ''
+    defectReasonId: '',
+    page: 1,
+    pageSize: 50
   });
   const [detailRecords, setDetailRecords] = useState<DetailRecord[]>([]);
+  const [detailTotal, setDetailTotal] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [changeLogFilters, setChangeLogFilters] = useState<ChangeLogFilters>({
     startDate: getTodayDateInputValue(),
     endDate: getTodayDateInputValue(),
     barcode: '',
-    operatorUsername: ''
+    operatorUsername: '',
+    page: 1,
+    pageSize: 50
   });
   const [changeLogs, setChangeLogs] = useState<InspectionRecordChangeLog[]>([]);
+  const [changeLogTotal, setChangeLogTotal] = useState(0);
   const [changeLogLoading, setChangeLogLoading] = useState(false);
   const [changeLogError, setChangeLogError] = useState<string | null>(null);
 
@@ -120,13 +127,14 @@ export function QueryAnalysisPage() {
     };
   }, [dashboardFilters]);
 
-  async function handleDetailSearch() {
+  async function handleDetailSearch(nextFilters = detailFilters) {
     setDetailLoading(true);
     setDetailError(null);
 
     try {
-      const response = await fetchDetailRecords(detailFilters);
+      const response = await fetchDetailRecords(nextFilters);
       setDetailRecords(response.records);
+      setDetailTotal(response.total);
     } catch {
       setDetailError('明细查询失败，请检查筛选条件后重试');
     } finally {
@@ -134,13 +142,14 @@ export function QueryAnalysisPage() {
     }
   }
 
-  async function handleChangeLogSearch() {
+  async function handleChangeLogSearch(nextFilters = changeLogFilters) {
     setChangeLogLoading(true);
     setChangeLogError(null);
 
     try {
-      const response = await fetchInspectionRecordChangeLogs(changeLogFilters);
+      const response = await fetchInspectionRecordChangeLogs(nextFilters);
       setChangeLogs(response.logs);
+      setChangeLogTotal(response.total);
     } catch {
       setChangeLogError('操作记录查询失败，请检查筛选条件后重试');
     } finally {
@@ -156,6 +165,17 @@ export function QueryAnalysisPage() {
       await handleDetailSearch();
     } catch {
       setDetailError('变更为不合格失败，请确认记录状态和缺陷原因');
+    }
+  }
+
+  async function handleUpdateUnqualifiedReasons(recordId: string, defectReasonIds: string[]) {
+    setDetailError(null);
+
+    try {
+      await updateUnqualifiedRecordReasons(recordId, defectReasonIds);
+      await handleDetailSearch();
+    } catch {
+      setDetailError('修改不合格原因失败，请确认记录状态和缺陷原因');
     }
   }
 
@@ -217,11 +237,17 @@ export function QueryAnalysisPage() {
           detailFilters={detailFilters}
           detailLoading={detailLoading}
           detailRecords={detailRecords}
+          detailTotal={detailTotal}
           productionLines={productionLines}
           onFilterChange={setDetailFilters}
           onSearch={handleDetailSearch}
+          onPageSearch={(filters) => {
+            setDetailFilters(filters);
+            void handleDetailSearch(filters);
+          }}
           onExport={() => exportDetailRecords(detailRecords)}
           onReclassify={handleReclassify}
+          onUpdateUnqualifiedReasons={handleUpdateUnqualifiedReasons}
         />
       ) : (
         <ChangeLogTab
@@ -229,8 +255,13 @@ export function QueryAnalysisPage() {
           changeLogFilters={changeLogFilters}
           changeLogLoading={changeLogLoading}
           changeLogs={changeLogs}
+          changeLogTotal={changeLogTotal}
           onFilterChange={setChangeLogFilters}
           onSearch={handleChangeLogSearch}
+          onPageSearch={(filters) => {
+            setChangeLogFilters(filters);
+            void handleChangeLogSearch(filters);
+          }}
           onExport={() => exportChangeLogs(changeLogs)}
         />
       )}
@@ -438,56 +469,71 @@ function DetailQueryTab({
   detailFilters,
   detailLoading,
   detailRecords,
+  detailTotal,
   productionLines,
   onFilterChange,
   onSearch,
+  onPageSearch,
   onExport,
-  onReclassify
+  onReclassify,
+  onUpdateUnqualifiedReasons
 }: {
   defectReasons: DefectReasonOption[];
   detailError: string | null;
   detailFilters: DetailQueryFilters;
   detailLoading: boolean;
   detailRecords: DetailRecord[];
+  detailTotal: number;
   productionLines: ProductionLineOption[];
   onFilterChange: (filters: DetailQueryFilters) => void;
   onSearch: () => void;
+  onPageSearch: (filters: DetailQueryFilters) => void;
   onExport: () => void;
   onReclassify: (recordId: string, defectReasonIds: string[]) => Promise<void>;
+  onUpdateUnqualifiedReasons: (recordId: string, defectReasonIds: string[]) => Promise<void>;
 }) {
-  const [reclassifyRecord, setReclassifyRecord] = useState<DetailRecord | null>(null);
-  const [reclassifyReasonIds, setReclassifyReasonIds] = useState<string[]>([]);
-  const [isReclassifying, setIsReclassifying] = useState(false);
+  const [reasonDialog, setReasonDialog] = useState<{ mode: 'reclassify' | 'update'; record: DetailRecord } | null>(null);
+  const [selectedReasonIds, setSelectedReasonIds] = useState<string[]>([]);
+  const [isSavingReasons, setIsSavingReasons] = useState(false);
 
   function updateFilter(key: keyof DetailQueryFilters, value: string) {
-    onFilterChange({ ...detailFilters, [key]: value });
+    onFilterChange({ ...detailFilters, [key]: value, page: 1 });
   }
 
   function openReclassifyDialog(record: DetailRecord) {
-    setReclassifyRecord(record);
-    setReclassifyReasonIds([]);
+    setReasonDialog({ mode: 'reclassify', record });
+    setSelectedReasonIds([]);
+  }
+
+  function openUpdateReasonsDialog(record: DetailRecord) {
+    setReasonDialog({ mode: 'update', record });
+    setSelectedReasonIds(record.defectReasons.map((reason) => reason.id));
   }
 
   function toggleReclassifyReason(reasonId: string) {
-    setReclassifyReasonIds((current) =>
+    setSelectedReasonIds((current) =>
       current.includes(reasonId)
         ? current.filter((candidate) => candidate !== reasonId)
         : [...current, reasonId]
     );
   }
 
-  async function submitReclassification() {
-    if (!reclassifyRecord || !reclassifyReasonIds.length) {
+  async function submitReasonDialog() {
+    if (!reasonDialog || !selectedReasonIds.length) {
       return;
     }
 
-    setIsReclassifying(true);
+    setIsSavingReasons(true);
     try {
-      await onReclassify(reclassifyRecord.id, reclassifyReasonIds);
-      setReclassifyRecord(null);
-      setReclassifyReasonIds([]);
+      if (reasonDialog.mode === 'reclassify') {
+        await onReclassify(reasonDialog.record.id, selectedReasonIds);
+      } else {
+        await onUpdateUnqualifiedReasons(reasonDialog.record.id, selectedReasonIds);
+      }
+      setReasonDialog(null);
+      setSelectedReasonIds([]);
     } finally {
-      setIsReclassifying(false);
+      setIsSavingReasons(false);
     }
   }
 
@@ -605,6 +651,10 @@ function DetailQueryTab({
                       <Button type="button" variant="secondary" onClick={() => openReclassifyDialog(record)}>
                         变更为不合格
                       </Button>
+                    ) : record.result === 'UNQUALIFIED' ? (
+                      <Button type="button" variant="secondary" onClick={() => openUpdateReasonsDialog(record)}>
+                        修改原因
+                      </Button>
                     ) : (
                       '-'
                     )}
@@ -620,17 +670,27 @@ function DetailQueryTab({
         </table>
       </div>
 
-      {reclassifyRecord ? (
+      <PaginationBar
+        page={detailFilters.page ?? 1}
+        pageSize={detailFilters.pageSize ?? 50}
+        total={detailTotal}
+        onPageChange={(page) => onPageSearch({ ...detailFilters, page })}
+        onPageSizeChange={(pageSize) => onPageSearch({ ...detailFilters, page: 1, pageSize })}
+      />
+
+      {reasonDialog ? (
         <div className="modal-backdrop">
           <div
-            className="form-panel"
+            className="form-panel reason-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label={`变更为不合格：${reclassifyRecord.barcode}`}
+            aria-label={`${reasonDialog.mode === 'reclassify' ? '变更为不合格' : '修改不合格原因'}：${reasonDialog.record.barcode}`}
           >
-            <h2>变更为不合格</h2>
-            <p className="muted-text">{reclassifyRecord.barcode} · {reclassifyRecord.partNumber}</p>
-            <div className="defect-reasons">
+            <div className="reason-dialog__header">
+              <h2>{reasonDialog.mode === 'reclassify' ? '变更为不合格' : '修改不合格原因'}</h2>
+              <p className="muted-text">{reasonDialog.record.barcode} · {reasonDialog.record.partNumber}</p>
+            </div>
+            <div className="defect-reasons reason-dialog__body">
               <div className="defect-reasons__title">选择缺陷原因</div>
               <div className="defect-reasons__grid">
                 {defectReasons.map((reason) => (
@@ -638,12 +698,12 @@ function DetailQueryTab({
                     key={reason.id}
                     className={[
                       'defect-reason',
-                      reclassifyReasonIds.includes(reason.id) ? 'defect-reason--selected' : ''
+                      selectedReasonIds.includes(reason.id) ? 'defect-reason--selected' : ''
                     ].filter(Boolean).join(' ')}
                   >
                     <input
                       type="checkbox"
-                      checked={reclassifyReasonIds.includes(reason.id)}
+                      checked={selectedReasonIds.includes(reason.id)}
                       onChange={() => toggleReclassifyReason(reason.id)}
                     />
                     <span>{reason.code} {reason.name}</span>
@@ -652,18 +712,18 @@ function DetailQueryTab({
               </div>
             </div>
             <div className="form-actions">
-              <Button type="button" variant="secondary" disabled={isReclassifying} onClick={() => setReclassifyRecord(null)}>
+              <Button type="button" variant="secondary" disabled={isSavingReasons} onClick={() => setReasonDialog(null)}>
                 取消
               </Button>
               <Button
                 type="button"
                 variant="danger"
-                disabled={!reclassifyReasonIds.length || isReclassifying}
-                loading={isReclassifying}
-                loadingLabel="变更中..."
-                onClick={() => void submitReclassification()}
+                disabled={!selectedReasonIds.length || isSavingReasons}
+                loading={isSavingReasons}
+                loadingLabel="保存中..."
+                onClick={() => void submitReasonDialog()}
               >
-                确认变更
+                {reasonDialog.mode === 'reclassify' ? '确认变更' : '保存原因'}
               </Button>
             </div>
           </div>
@@ -678,20 +738,24 @@ function ChangeLogTab({
   changeLogFilters,
   changeLogLoading,
   changeLogs,
+  changeLogTotal,
   onFilterChange,
   onSearch,
+  onPageSearch,
   onExport
 }: {
   changeLogError: string | null;
   changeLogFilters: ChangeLogFilters;
   changeLogLoading: boolean;
   changeLogs: InspectionRecordChangeLog[];
+  changeLogTotal: number;
   onFilterChange: (filters: ChangeLogFilters) => void;
   onSearch: () => void;
+  onPageSearch: (filters: ChangeLogFilters) => void;
   onExport: () => void;
 }) {
   function updateFilter(key: keyof ChangeLogFilters, value: string) {
-    onFilterChange({ ...changeLogFilters, [key]: value });
+    onFilterChange({ ...changeLogFilters, [key]: value, page: 1 });
   }
 
   return (
@@ -756,9 +820,9 @@ function ChangeLogTab({
               changeLogs.map((log) => (
                 <tr key={log.id}>
                   <td>{formatScanTime(log.operatedAt)}</td>
-                  <td className="query-breakable">{log.barcode}</td>
-                  <td className="query-breakable">{log.partNumber}</td>
-                  <td>{resultLabels[log.previousResult]} -&gt; {resultLabels[log.newResult]}</td>
+                  <td className="query-breakable">{log.barcode ?? '-'}</td>
+                  <td className="query-breakable">{log.partNumber ?? '-'}</td>
+                  <td>{formatOperationChange(log)}</td>
                   <td>{log.defectReasons.map((reason) => reason.name).join('、') || '-'}</td>
                   <td>{log.operator.username}</td>
                 </tr>
@@ -771,7 +835,58 @@ function ChangeLogTab({
           </tbody>
         </table>
       </div>
+
+      <PaginationBar
+        page={changeLogFilters.page ?? 1}
+        pageSize={changeLogFilters.pageSize ?? 50}
+        total={changeLogTotal}
+        onPageChange={(page) => onPageSearch({ ...changeLogFilters, page })}
+        onPageSizeChange={(pageSize) => onPageSearch({ ...changeLogFilters, page: 1, pageSize })}
+      />
     </section>
+  );
+}
+
+function PaginationBar({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const clampedPage = Math.min(page, totalPages);
+
+  return (
+    <div className="pagination-bar" aria-label="分页">
+      <span>共 {total} 条</span>
+      <Select
+        label="每页数量"
+        value={String(pageSize)}
+        onChange={(event) => onPageSizeChange(Number(event.target.value))}
+      >
+        {[20, 50, 100, 200].map((option) => (
+          <option key={option} value={option}>
+            {option} 条/页
+          </option>
+        ))}
+      </Select>
+      <div className="row-actions">
+        <Button type="button" variant="secondary" disabled={clampedPage <= 1} onClick={() => onPageChange(clampedPage - 1)}>
+          上一页
+        </Button>
+        <span>{clampedPage} / {totalPages}</span>
+        <Button type="button" variant="secondary" disabled={clampedPage >= totalPages} onClick={() => onPageChange(clampedPage + 1)}>
+          下一页
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -839,6 +954,32 @@ function formatScanTime(value: string): string {
   }).format(new Date(value));
 }
 
+function formatOperationChange(log: InspectionRecordChangeLog): string {
+  if (log.previousResult && log.newResult) {
+    if (log.action === 'UPDATE_UNQUALIFIED_REASONS') {
+      return '修改不合格原因';
+    }
+    return `${resultLabels[log.previousResult]} -> ${resultLabels[log.newResult]}`;
+  }
+
+  const actionLabels: Record<string, string> = {
+    CREATE: '新增',
+    UPDATE: '编辑',
+    DELETE: '删除',
+    RESET_PASSWORD: '重置密码',
+    IMPORT: '导入'
+  };
+  const targetLabels: Record<string, string> = {
+    user: '用户',
+    defectReason: '缺陷原因',
+    operatorProfile: '操作工',
+    productionLine: '产线',
+    specialBarcode: '特殊条码'
+  };
+
+  return `${actionLabels[log.action] ?? log.action} ${targetLabels[log.targetType] ?? log.targetType}：${log.targetLabel}`;
+}
+
 function getTodayDateInputValue(): string {
   const parts = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -904,9 +1045,9 @@ async function exportChangeLogs(logs: InspectionRecordChangeLog[]) {
   await writeWorkbook('操作记录.xlsx', {
     操作记录: logs.map((log) => ({
       操作时间: formatScanTime(log.operatedAt),
-      条码: log.barcode,
-      零件号: log.partNumber,
-      变更: `${resultLabels[log.previousResult]} -> ${resultLabels[log.newResult]}`,
+      条码: log.barcode ?? '',
+      零件号: log.partNumber ?? '',
+      变更: formatOperationChange(log),
       缺陷原因: log.defectReasons.map((reason) => `${reason.code} ${reason.name}`).join('、'),
       操作人: log.operator.username
     }))

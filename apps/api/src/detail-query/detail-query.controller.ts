@@ -31,6 +31,8 @@ export class DetailQueryController {
       partNumber?: string;
       result?: string;
       defectReasonId?: string;
+      page?: string;
+      pageSize?: string;
     }
   ) {
     return this.detailQuery.listRecords(query);
@@ -46,6 +48,16 @@ export class DetailQueryController {
     return this.detailQuery.reclassifyQualifiedRecordToUnqualified(auth, id, dto);
   }
 
+  @Post('records/:id/update-unqualified-reasons')
+  @Roles(Role.QUERY, Role.ADMIN)
+  updateUnqualifiedReasons(
+    @CurrentUser() auth: ActiveSessionContext,
+    @Param('id') id: string,
+    @Body() dto: ReclassifyInspectionRecordDto
+  ) {
+    return this.detailQuery.updateUnqualifiedRecordReasons(auth, id, dto);
+  }
+
   @Get('change-logs')
   @Roles(Role.QUERY, Role.ADMIN)
   changeLogs(
@@ -55,6 +67,8 @@ export class DetailQueryController {
       endDate?: string;
       barcode?: string;
       operatorUsername?: string;
+      page?: string;
+      pageSize?: string;
     }
   ) {
     return this.detailQuery.listChangeLogs(query);

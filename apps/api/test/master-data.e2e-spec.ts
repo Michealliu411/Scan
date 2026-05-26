@@ -30,11 +30,21 @@ describe('Master data API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const changeLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260511095143_add_inspection_record_change_log/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: changeLogMigrationSql });
     const operatorMigrationSql = await readFile(
       join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
+    const operationLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260525090000_add_operation_logs/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -53,6 +63,8 @@ describe('Master data API', () => {
 
   beforeEach(async () => {
     await prisma.session.deleteMany();
+    await prisma.operationLog.deleteMany();
+    await prisma.inspectionRecordChangeLog.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
     await prisma.specialBarcode.deleteMany();
@@ -178,6 +190,12 @@ describe('Master data API', () => {
     await expect(
       prisma.user.findUnique({ where: { id: createResponse.body.id } })
     ).resolves.toBeNull();
+
+    const logs = await prisma.operationLog.findMany({
+      where: { targetType: 'user', targetId: createResponse.body.id },
+      orderBy: { operatedAt: 'asc' }
+    });
+    expect(logs.map((log) => log.action)).toEqual(['CREATE', 'UPDATE', 'RESET_PASSWORD', 'DELETE']);
   });
 
   it('blocks administrator password reset through the master-data reset flow', async () => {
@@ -435,5 +453,30 @@ describe('Master data API', () => {
         })
       ])
     );
+  });
+
+  it('auto-restores the built-in dirty barcode defect reason when creating dirty barcodes', async () => {
+    const generatedResponse = await adminAgent.post('/master-data/special-barcodes/generate').expect(201);
+
+    const dirtyResponse = await adminAgent
+      .post('/master-data/special-barcodes')
+      .send({
+        type: SpecialBarcodeType.DIRTY,
+        barcode: generatedResponse.body.barcode,
+        isActive: true
+      })
+      .expect(201);
+
+    expect(dirtyResponse.body).toMatchObject({
+      type: SpecialBarcodeType.DIRTY,
+      defectReason: {
+        code: 'BARCODE_DAMAGED',
+        name: '条码污损'
+      }
+    });
+
+    await expect(
+      prisma.defectReason.findUniqueOrThrow({ where: { code: 'BARCODE_DAMAGED' } })
+    ).resolves.toMatchObject({ isActive: true });
   });
 });

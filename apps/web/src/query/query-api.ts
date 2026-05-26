@@ -26,6 +26,13 @@ export function reclassifyInspectionRecord(recordId: string, defectReasonIds: st
   });
 }
 
+export function updateUnqualifiedRecordReasons(recordId: string, defectReasonIds: string[]): Promise<DetailRecord> {
+  return apiFetch<DetailRecord>(`/detail-query/records/${recordId}/update-unqualified-reasons`, {
+    method: 'POST',
+    body: JSON.stringify({ defectReasonIds })
+  });
+}
+
 export function fetchInspectionRecordChangeLogs(
   filters: ChangeLogFilters = {}
 ): Promise<ChangeLogQueryResponse> {

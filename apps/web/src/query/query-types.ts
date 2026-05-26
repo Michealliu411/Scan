@@ -59,6 +59,8 @@ export type DetailQueryFilters = {
   partNumber?: string;
   result?: InspectionResult | '';
   defectReasonId?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export type ChangeLogFilters = {
@@ -66,6 +68,8 @@ export type ChangeLogFilters = {
   endDate?: string;
   barcode?: string;
   operatorUsername?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export type DetailRecord = {
@@ -92,18 +96,26 @@ export type DetailRecord = {
 
 export type DetailQueryResponse = {
   records: DetailRecord[];
-  limit: number;
+  page: number;
+  pageSize: number;
+  total: number;
 };
 
 export type InspectionRecordChangeLog = {
   id: string;
-  inspectionRecordId: string;
+  inspectionRecordId: string | null;
   operatedAt: string;
-  barcode: string;
-  partNumber: string;
-  previousResult: InspectionResult;
-  newResult: InspectionResult;
+  barcode: string | null;
+  partNumber: string | null;
+  previousResult: InspectionResult | null;
+  newResult: InspectionResult | null;
   defectReasons: DefectReasonOption[];
+  module: string;
+  action: string;
+  targetType: string;
+  targetLabel: string;
+  before: unknown;
+  after: unknown;
   operator: {
     id: string;
     username: string;
@@ -112,5 +124,7 @@ export type InspectionRecordChangeLog = {
 
 export type ChangeLogQueryResponse = {
   logs: InspectionRecordChangeLog[];
-  limit: number;
+  page: number;
+  pageSize: number;
+  total: number;
 };

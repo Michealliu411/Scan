@@ -165,6 +165,32 @@ model InspectionRecordChangeLog {
   @@index([barcode])
 }
 
+model OperationLog {
+  id                String   @id @default(cuid())
+  module            String
+  action            String
+  targetType        String
+  targetId          String?
+  targetLabel       String
+  barcode           String?
+  partNumber        String?
+  previousResult    String?
+  newResult         String?
+  defectReasonsJson String?
+  beforeJson        String?
+  afterJson         String?
+  operatorId        String
+  operatorUsername  String
+  operatedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  @@index([operatedAt])
+  @@index([operatorUsername])
+  @@index([barcode])
+  @@index([module])
+  @@index([targetType])
+}
+
 model InspectionRecordDefectReason {
   id                 String @id @default(cuid())
   inspectionRecordId String

@@ -51,6 +51,34 @@ describe('LoginPage', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('allows submitting without a production line so non-inspector roles are not blocked', async () => {
+    const fetchMock = createLoginFetchMock({ productionLines: [] });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderLoginPage();
+
+    fireEvent.change(await screen.findByLabelText('用户'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: 'admin' } });
+
+    const loginButton = screen.getByRole('button', { name: '登录' }) as HTMLButtonElement;
+    expect(loginButton.disabled).toBe(false);
+
+    fireEvent.click(loginButton);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/auth/login',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            username: 'admin',
+            password: 'admin'
+          })
+        })
+      );
+    });
+  });
 });
 
 function renderLoginPage() {
@@ -61,7 +89,9 @@ function renderLoginPage() {
   );
 }
 
-function createLoginFetchMock() {
+function createLoginFetchMock(options?: { productionLines?: typeof productionLines }) {
+  const lines = options?.productionLines ?? productionLines;
+
   return vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
 
@@ -70,14 +100,14 @@ function createLoginFetchMock() {
     }
 
     if (url.endsWith('/production-lines')) {
-      return Promise.resolve(jsonResponse(productionLines));
+      return Promise.resolve(jsonResponse(lines));
     }
 
     if (url.endsWith('/auth/login')) {
       return Promise.resolve(
         jsonResponse({
           user: { id: 'user-1', username: 'admin', role: 'ADMIN', mustChangePassword: false },
-          productionLine: productionLines[1]
+          productionLine: lines[1] ?? productionLines[0]
         })
       );
     }

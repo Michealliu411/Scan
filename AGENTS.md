@@ -10,3 +10,5 @@ Before implementing substantive changes, read:
 - `.planning/STATE.md`
 
 Planning docs are intentionally gitignored for this project. Keep implementation changes aligned with the active phase and update `.planning/STATE.md` when project direction changes.
+
+For every future functional, data-model, deployment, or behavior change, create a standalone PCR document under `docs/pcr/` before closing the work. Use `docs/pcr/PCR-TEMPLATE.md` as the baseline format, and name files as `PCR-YYYYMMDD-short-topic.md`.

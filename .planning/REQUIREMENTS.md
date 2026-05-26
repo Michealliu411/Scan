@@ -114,6 +114,14 @@
 - [x] **TRIAL-05**: Operator profiles can be imported from Excel.
 - [x] **TRIAL-06**: Unqualified inspection supports operator selection by name, employee code, or pinyin initials without case sensitivity.
 - [x] **TRIAL-07**: Defect codes support deduction amounts, and unqualified inspection accumulates selected-code deduction totals.
+- [x] **TRIAL-08**: Operator profile lists are ordered by employee code.
+- [x] **TRIAL-09**: User, defect-reason, production-line, operator, and special-barcode master-data lists support local keyword search by visible non-operation columns.
+- [x] **TRIAL-10**: User, defect-reason, and production-line creation flows open in modal dialogs.
+- [x] **TRIAL-11**: Master-data create, update, delete, password-reset, qualified-to-unqualified reclassification, and unqualified-reason edits are written to operation logs without foreign-key coupling that blocks safe deletion.
+- [x] **TRIAL-12**: Detail query allows unqualified records to update their defect reasons and recalculates deduction amounts.
+- [x] **TRIAL-13**: Detail records and operation logs support pagination with page-size options capped at 200 rows.
+- [x] **TRIAL-14**: The built-in dirty-barcode defect reason is automatically restored when saving dirty-barcode special configurations.
+- [x] **TRIAL-15**: Qualified-to-unqualified and unqualified-reason edit dialogs keep action buttons fixed while long defect-reason lists scroll inside the dialog body.
 
 ## v2 Requirements
 
@@ -217,4 +225,4 @@
 
 ---
 *Requirements defined: 2026-05-06*
-*Last updated: 2026-05-18 after post-v1 status alignment*
+*Last updated: 2026-05-25 after trial-run audit, pagination, and dirty-barcode fixes*

@@ -36,11 +36,21 @@ describe('Scanning API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: migrationSql });
+    const changeLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260511095143_add_inspection_record_change_log/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: changeLogMigrationSql });
     const operatorMigrationSql = await readFile(
       join(__dirname, '../prisma/migrations/20260518113000_add_operator_profiles_and_deductions/migration.sql'),
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operatorMigrationSql });
+    const operationLogMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260525090000_add_operation_logs/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
