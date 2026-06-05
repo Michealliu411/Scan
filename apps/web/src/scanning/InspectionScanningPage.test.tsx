@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { InspectionScanningPage } from './InspectionScanningPage';
 import {
@@ -157,7 +157,7 @@ describe('InspectionScanningPage', () => {
     });
   });
 
-  it('successful submit clears the barcode input and calls fetchTodayRecords', async () => {
+  it('successful submit clears the barcode input and appends the created record without refetching today records', async () => {
     render(<InspectionScanningPage />);
 
     scanBarcode();
@@ -165,8 +165,77 @@ describe('InspectionScanningPage', () => {
     expect(await screen.findByText('检验记录已提交')).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByLabelText('条码')).toHaveProperty('value', '');
-      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(2);
+      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByText('ABC123456')).toBeTruthy();
+  });
+
+  it('queues consecutive qualified scans while the first submit is still running', async () => {
+    let resolveFirstSubmit: (record: Awaited<ReturnType<typeof submitInspectionRecord>>) => void = () => {};
+    lookupBarcodeMock
+      .mockResolvedValueOnce({
+        kind: 'RESOLVED_PART',
+        barcode: 'FAST-001',
+        partNumber: 'PN-001',
+        vehicleModel: '车型-001',
+        source: 'PRODUCTION_ORDER_LOOKUP'
+      })
+      .mockResolvedValueOnce({
+        kind: 'RESOLVED_PART',
+        barcode: 'FAST-002',
+        partNumber: 'PN-002',
+        vehicleModel: '车型-002',
+        source: 'PRODUCTION_ORDER_LOOKUP'
+      });
+    submitInspectionRecordMock
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstSubmit = resolve;
+          })
+      )
+      .mockResolvedValueOnce({
+        id: 'record-2',
+        barcode: 'FAST-002',
+        partNumber: 'PN-002',
+        vehicleModel: '车型-002',
+        result: 'QUALIFIED',
+        scannedAt: '2026-05-07T01:02:04.000Z',
+        defectReasons: []
+      });
+
+    render(<InspectionScanningPage />);
+
+    fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'FAST-001' } });
+    fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
+
+    await waitFor(() => {
+      expect(submitInspectionRecordMock).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByLabelText('条码')).toHaveProperty('disabled', false);
+
+    fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'FAST-002' } });
+    fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
+
+    expect(await screen.findByText(/待处理 1 条/)).toBeTruthy();
+
+    await act(async () => {
+      resolveFirstSubmit({
+        id: 'record-1',
+        barcode: 'FAST-001',
+        partNumber: 'PN-001',
+        vehicleModel: '车型-001',
+        result: 'QUALIFIED',
+        scannedAt: '2026-05-07T01:02:03.000Z',
+        defectReasons: []
+      });
+    });
+
+    await waitFor(() => {
+      expect(lookupBarcodeMock).toHaveBeenCalledWith('FAST-002');
+      expect(submitInspectionRecordMock).toHaveBeenCalledTimes(2);
+    });
+    expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(1);
   });
 
   it('QUALIFIED_BARCODE_DUPLICATE renders existing production line and inspector details', async () => {
@@ -215,7 +284,7 @@ describe('InspectionScanningPage', () => {
     expect(within(details).getByText('划伤、污损')).toBeTruthy();
   });
 
-  it('dirty special barcode lookup auto-submits and refreshes today records', async () => {
+  it('dirty special barcode lookup auto-submits and appends the created record', async () => {
     lookupBarcodeMock.mockResolvedValueOnce({
       kind: 'DIRTY_BARCODE_AUTO_SUBMITTED',
       record: {
@@ -238,9 +307,10 @@ describe('InspectionScanningPage', () => {
 
     expect(await screen.findByText('条码污损记录已自动提交')).toBeTruthy();
     await waitFor(() => {
-      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(2);
+      expect(fetchTodayRecordsMock).toHaveBeenCalledTimes(1);
       expect(screen.getByLabelText('条码')).toHaveProperty('value', '');
     });
+    expect(screen.getByText('22222222-2222-4222-8222-222222222222')).toBeTruthy();
     expect(submitInspectionRecordMock).not.toHaveBeenCalled();
   });
 

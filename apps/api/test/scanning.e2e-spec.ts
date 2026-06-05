@@ -439,6 +439,30 @@ describe('Scanning API', () => {
     ]);
   });
 
+  it('limits today-records to the latest 80 rows for scanning workstation responsiveness', async () => {
+    const inspector = await login('inspector');
+    const inspectorUser = await prisma.user.findUniqueOrThrow({ where: { username: 'inspector' } });
+    const now = Date.now();
+
+    await prisma.inspectionRecord.createMany({
+      data: Array.from({ length: 85 }, (_, index) => ({
+        barcode: `BULK-${String(index).padStart(3, '0')}`,
+        partNumber: `PN-${String(index).padStart(3, '0')}`,
+        vehicleModel: '批量测试车型',
+        productionLineId,
+        inspectorId: inspectorUser.id,
+        result: InspectionResult.QUALIFIED,
+        scannedAt: new Date(now - (84 - index) * 1000)
+      }))
+    });
+
+    const response = await inspector.get('/scanning/today-records').expect(200);
+
+    expect(response.body).toHaveLength(80);
+    expect(response.body[0].barcode).toBe('BULK-084');
+    expect(response.body.at(-1).barcode).toBe('BULK-005');
+  });
+
   it('blocks query users from scanning endpoints', async () => {
     const query = await login('query');
 

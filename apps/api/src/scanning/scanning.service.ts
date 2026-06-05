@@ -21,6 +21,8 @@ type InspectionRecordWithDetails = Prisma.InspectionRecordGetPayload<{
 
 @Injectable()
 export class ScanningService {
+  private readonly todayRecordLimit = 80;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(SCAN_LOOKUP_GATEWAY)
@@ -137,7 +139,8 @@ export class ScanningService {
         }
       },
       include: this.recordInclude,
-      orderBy: { scannedAt: 'desc' }
+      orderBy: { scannedAt: 'desc' },
+      take: this.todayRecordLimit
     });
 
     return records.map((record) => this.toRecordResponse(record));

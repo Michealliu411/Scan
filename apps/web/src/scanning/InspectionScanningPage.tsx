@@ -27,6 +27,7 @@ type ScanLayoutPreset = 'standard' | 'details-first' | 'actions-first';
 const lookupFailureMessage = '未找到零件信息，请修改后重试或重新扫描';
 const duplicateQualifiedMessage = '该条码已存在合格记录，不能重复提交';
 const workstationLayoutKey = 'scan.workstationLayout';
+const scanDetailLimit = 80;
 const scanLayoutPresets: Array<{ value: ScanLayoutPreset; label: string }> = [
   { value: 'standard', label: '标准' },
   { value: 'details-first', label: '明细优先' },
@@ -35,6 +36,8 @@ const scanLayoutPresets: Array<{ value: ScanLayoutPreset; label: string }> = [
 
 export function InspectionScanningPage() {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const scanQueueRef = useRef<string[]>([]);
+  const isProcessingScanRef = useRef(false);
   const [barcode, setBarcode] = useState('');
   const [lookupStatus, setLookupStatus] = useState<LookupStatus>('idle');
   const [resolvedPart, setResolvedPart] = useState<ResolvedPart | null>(null);
@@ -51,6 +54,8 @@ export function InspectionScanningPage() {
   const [defectReasons, setDefectReasons] = useState<DefectReasonOption[]>([]);
   const [todayRecords, setTodayRecords] = useState<InspectionDetailRecord[]>([]);
   const [layoutPreset, setLayoutPreset] = useState<ScanLayoutPreset>(() => readScanLayoutPreset());
+  const [activeScanBarcode, setActiveScanBarcode] = useState<string | null>(null);
+  const [queuedScanCount, setQueuedScanCount] = useState(0);
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
@@ -87,7 +92,7 @@ export function InspectionScanningPage() {
 
   async function loadTodayRecords() {
     try {
-      setTodayRecords(await fetchTodayRecords());
+      setTodayRecords((await fetchTodayRecords()).slice(0, scanDetailLimit));
     } catch (error) {
       setSubmitError(extractUnknownMessage(error, '今日检验明细加载失败'));
     }
@@ -103,9 +108,13 @@ export function InspectionScanningPage() {
 
   function handleBarcodeChange(nextBarcode: string) {
     setBarcode(nextBarcode);
-    if (resolvedPart) {
+    if (resolvedPart && !isProcessingScanRef.current) {
       resetScanState();
     }
+  }
+
+  function prependTodayRecord(record: InspectionDetailRecord) {
+    setTodayRecords((current) => [record, ...current.filter((candidate) => candidate.id !== record.id)].slice(0, scanDetailLimit));
   }
 
   function handleClearScan() {
@@ -129,12 +138,48 @@ export function InspectionScanningPage() {
     setSelectedOperator(null);
   }
 
-  async function handleLookup() {
-    const trimmedBarcode = barcode.trim();
-    if (!trimmedBarcode || lookupStatus === 'loading') {
+  function enqueueQualifiedScan(nextBarcode: string) {
+    scanQueueRef.current.push(nextBarcode);
+    setQueuedScanCount(scanQueueRef.current.length);
+    void drainQualifiedScanQueue();
+  }
+
+  async function drainQualifiedScanQueue() {
+    if (isProcessingScanRef.current) {
       return;
     }
 
+    isProcessingScanRef.current = true;
+    try {
+      while (scanQueueRef.current.length > 0) {
+        const nextBarcode = scanQueueRef.current.shift();
+        if (!nextBarcode) {
+          break;
+        }
+        setQueuedScanCount(scanQueueRef.current.length);
+        setActiveScanBarcode(nextBarcode);
+        const success = await handleLookup(nextBarcode);
+        if (!success) {
+          scanQueueRef.current = [];
+          setQueuedScanCount(0);
+          setSubmitError((current) => current ?? '连续扫码已暂停，请确认异常条码后继续扫描');
+          break;
+        }
+      }
+    } finally {
+      isProcessingScanRef.current = false;
+      setActiveScanBarcode(null);
+      setQueuedScanCount(scanQueueRef.current.length);
+      barcodeInputRef.current?.focus();
+    }
+  }
+
+  async function handleLookup(trimmedBarcode = barcode.trim()): Promise<boolean> {
+    if (!trimmedBarcode || lookupStatus === 'loading') {
+      return false;
+    }
+
+    const shouldAutoSubmitQualified = mode !== 'unqualified';
     setLookupStatus('loading');
     setLookupError(null);
     setSubmitError(null);
@@ -147,44 +192,59 @@ export function InspectionScanningPage() {
       if (result.kind === 'DIRTY_BARCODE_AUTO_SUBMITTED') {
         setSubmitStatus('success');
         setSuccessMessage('条码污损记录已自动提交');
+        prependTodayRecord(result.record);
         setBarcode('');
         setResolvedPart(null);
         setLookupStatus('idle');
         setMode('neutral');
         setSelectedDefectReasonIds([]);
-        await loadTodayRecords();
         barcodeInputRef.current?.focus();
-        return;
+        return true;
       }
 
-      setResolvedPart({
+      const part = {
         barcode: result.barcode,
         partNumber: result.partNumber,
         vehicleModel: result.vehicleModel
-      });
-      setBarcode(result.barcode);
-      setLookupStatus('success');
-      if (mode !== 'unqualified') {
-        await submitResolvedPart(
-          {
-            barcode: result.barcode,
-            partNumber: result.partNumber,
-            vehicleModel: result.vehicleModel
-          },
-          'QUALIFIED'
-        );
+      };
+      if (shouldAutoSubmitQualified) {
+        setResolvedPart(null);
+        setBarcode('');
+      } else {
+        setResolvedPart(part);
+        setBarcode(result.barcode);
       }
+      setLookupStatus('success');
+      if (shouldAutoSubmitQualified) {
+        return await submitResolvedPart(part, 'QUALIFIED');
+      }
+      return true;
     } catch (error) {
+      setBarcode(trimmedBarcode);
       setResolvedPart(null);
       setLookupStatus('error');
       setLookupError(extractUnknownMessage(error, lookupFailureMessage));
+      return false;
     }
   }
 
   function handleBarcodeKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       event.preventDefault();
-      void handleLookup();
+      const trimmedBarcode = barcode.trim();
+      if (!trimmedBarcode) {
+        return;
+      }
+
+      if (mode === 'unqualified') {
+        if (!isBusy) {
+          void handleLookup(trimmedBarcode);
+        }
+        return;
+      }
+
+      setBarcode('');
+      enqueueQualifiedScan(trimmedBarcode);
     }
   }
 
@@ -196,10 +256,10 @@ export function InspectionScanningPage() {
     await submitResolvedPart(resolvedPart, result);
   }
 
-  async function submitResolvedPart(part: ResolvedPart, result: InspectionResult) {
+  async function submitResolvedPart(part: ResolvedPart, result: InspectionResult): Promise<boolean> {
     if (result === 'UNQUALIFIED' && selectedDefectReasonIds.length === 0) {
       setSubmitError('请选择至少一个缺陷原因');
-      return;
+      return false;
     }
 
     setSubmitStatus('submitting');
@@ -208,7 +268,7 @@ export function InspectionScanningPage() {
     setDuplicateQualified(null);
 
     try {
-      await submitInspectionRecord({
+      const createdRecord = await submitInspectionRecord({
         barcode: part.barcode,
         partNumber: part.partNumber,
         vehicleModel: part.vehicleModel,
@@ -217,6 +277,7 @@ export function InspectionScanningPage() {
           ? { defectReasonIds: selectedDefectReasonIds, operatorProfileId: selectedOperator?.id }
           : {})
       });
+      prependTodayRecord(createdRecord);
       setSubmitStatus('success');
       setSuccessMessage('检验记录已提交');
       setBarcode('');
@@ -228,9 +289,10 @@ export function InspectionScanningPage() {
       setOperatorSearch('');
       setOperatorOptions([]);
       setSelectedOperator(null);
-      await loadTodayRecords();
       barcodeInputRef.current?.focus();
+      return true;
     } catch (error) {
+      setBarcode(part.barcode);
       setSubmitStatus('error');
       const duplicateDetails = parseDuplicateQualified(error);
       if (duplicateDetails) {
@@ -239,6 +301,7 @@ export function InspectionScanningPage() {
       } else {
         setSubmitError(extractUnknownMessage(error, '检验记录提交失败'));
       }
+      return false;
     }
   }
 
@@ -257,6 +320,7 @@ export function InspectionScanningPage() {
 
   const isResolved = Boolean(resolvedPart);
   const isBusy = lookupStatus === 'loading' || submitStatus === 'submitting';
+  const shouldDisableBarcodeInput = mode === 'unqualified' && isBusy;
   const selectedDeductionAmount = useMemo(
     () =>
       selectedDefectReasonIds.reduce((total, reasonId) => {
@@ -317,9 +381,15 @@ export function InspectionScanningPage() {
                 placeholder="扫描或输入条码后按 Enter"
                 onChange={(event) => handleBarcodeChange(event.target.value)}
                 onKeyDown={handleBarcodeKeyDown}
-                disabled={isBusy}
+                disabled={shouldDisableBarcodeInput}
               />
 
+              {activeScanBarcode ? (
+                <Alert>
+                  正在处理 {activeScanBarcode}
+                  {queuedScanCount > 0 ? `，待处理 ${queuedScanCount} 条` : ''}
+                </Alert>
+              ) : null}
               {lookupStatus === 'loading' ? <Alert>正在解析条码...</Alert> : null}
               {lookupError ? <Alert variant="error">{lookupError}</Alert> : null}
 

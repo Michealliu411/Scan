@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: post-v1-trial-run-hardening
-status: Trial-run feedback implemented; verification passing locally
-last_updated: "2026-05-25T09:00:00+08:00"
+current_phase: post-v1-field-hardening
+status: Continuous scanning throughput fix implemented and locally verified
+last_updated: "2026-06-05T00:00:00+08:00"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -24,7 +24,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-18)
 
 **Core value:** Inspection stations can quickly and reliably record scan results, enforce duplicate rules, and produce trustworthy Beijing-time daily/monthly quality statistics by workshop, production line, and part number.
-**Current focus:** Close trial-run feedback around master-data auditability, query pagination, unqualified-reason correction, modal ergonomics, and dirty-barcode reliability before the next Windows package.
+**Current focus:** Field hardening around scanner responsiveness and delivery reliability after trial-run feedback.
 
 ## Current Decisions
 
@@ -63,6 +63,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - Follow-up trial-run hardening added master-data operation audit logs, local master-data search, employee-code operator ordering, detail/operation pagination with a 200-row cap, editable unqualified reasons in detail query, fixed-footer reason dialogs for long reason lists, and automatic restoration of the built-in dirty-barcode reason.
 - The Windows package baseline database now includes the 42 active production defect reasons A0-A41, plus the system dirty-barcode reason `BARCODE_DAMAGED/条码污损`.
 - Login production-line selection is role-aware: inspectors must select an active production line, while administrators and query users can login without selecting one and see all-line context.
+- Inspection scanning now queues normal qualified scans while processing, keeps the barcode input available for continuous scanner input, locally prepends created records, and limits the workstation today-detail list to the latest 80 rows to avoid per-scan full-day refresh latency.
 
 ## Roadmap Position
 
@@ -135,9 +136,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - 2026-05-25: Implemented follow-up trial-run hardening: generic operation logs for master data and inspection corrections, safe delete behavior without audit-log foreign keys, unqualified-reason editing, detail/log pagination, master-data local search, modal create flows, dirty-barcode built-in reason auto-restore, and long reason-list dialog layout.
 - 2026-05-25: Updated the clean Windows package baseline database to include 42 active production defect reasons A0-A41 while retaining `BARCODE_DAMAGED/条码污损` for dirty-barcode workflows.
 - 2026-05-25: Adjusted login so administrators and query users do not need to choose a production line, while inspectors remain required to select one.
+- 2026-06-05: Implemented continuous scanning throughput hardening: normal qualified scans enter a sequential frontend queue, successful submissions append returned records locally, and the scanning today-records API returns only the latest 80 rows.
 
 ## Session Continuity
 
-Last session: 2026-05-25T09:00:00+08:00
-Stopped at: Trial-run hardening implemented and locally verified; next step is packaging or field UAT.
+Last session: 2026-06-05T00:00:00+08:00
+Stopped at: Continuous scanning throughput fix implemented and locally verified; package or field-test next.
 Resume file: none required unless opening the next milestone workflow.
