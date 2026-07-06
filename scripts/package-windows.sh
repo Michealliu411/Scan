@@ -96,9 +96,12 @@ For future updates, extract the new zip over C:\scan and run:
 
 Offline server note:
 - Servers are expected to have no internet access.
-- If this is an update and package dependencies did not change, prefer:
+- If this is an update and package dependencies and database schema did not change, use:
+  .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "SERVER_LAN_IP" -SkipInstall -SkipDatabase
+- Add -SkipBuild only when the package was already built for the same SERVER_LAN_IP and you have verified the frontend bundle contains SERVER_LAN_IP:3000:
   .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "SERVER_LAN_IP" -SkipInstall -SkipDatabase -SkipBuild
-- This reuses the existing node_modules, uses bundled build artifacts, and avoids npm/pnpm registry access.
+- When unsure, do not add -SkipBuild. Rebuilding on the server writes the correct VITE_API_BASE_URL from -ServerIp.
+- These update commands reuse the existing node_modules and avoid npm/pnpm registry access.
 - If dependencies or database schema changed, prepare that update intentionally before going on-site.
 
 The deploy script stores data under C:\scan\data.
@@ -110,4 +113,4 @@ rm -rf "$STAGING_DIR"
 
 printf 'Created Windows deployment package:\n%s\n' "$PACKAGE_PATH"
 printf '\nOffline update reminder:\n'
-printf 'For existing offline servers with unchanged dependencies/schema, run deploy with -SkipInstall -SkipDatabase -SkipBuild.\n'
+printf 'For existing offline servers with unchanged dependencies/schema, run deploy with -SkipInstall -SkipDatabase. Add -SkipBuild only after verifying the bundled frontend API URL.\n'

@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: post-v1-field-hardening
-status: Continuous scanning throughput fix implemented and locally verified
-last_updated: "2026-06-05T00:00:00+08:00"
+status: Daily production plan multi-line order allocation implemented and under final verification
+last_updated: "2026-06-08T14:45:00+08:00"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -24,7 +24,7 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-18)
 
 **Core value:** Inspection stations can quickly and reliably record scan results, enforce duplicate rules, and produce trustworthy Beijing-time daily/monthly quality statistics by workshop, production line, and part number.
-**Current focus:** Field hardening around scanner responsiveness and delivery reliability after trial-run feedback.
+**Current focus:** Field hardening around scanner responsiveness, daily production-order planning, and delivery reliability after trial-run feedback.
 
 ## Current Decisions
 
@@ -64,6 +64,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - The Windows package baseline database now includes the 42 active production defect reasons A0-A41, plus the system dirty-barcode reason `BARCODE_DAMAGED/条码污损`.
 - Login production-line selection is role-aware: inspectors must select an active production line, while administrators and query users can login without selecting one and see all-line context.
 - Inspection scanning now queues normal qualified scans while processing, keeps the barcode input available for continuous scanner input, locally prepends created records, and limits the workstation today-detail list to the latest 80 rows to avoid per-scan full-day refresh latency.
+- Production-order daily planning is now a first-class query/admin workflow: query users and administrators can lookup production orders, issue daily plans, adjust quantities, close plans, and copy active plans across dates.
+- Normal water-wash scan submissions are now bound to a same-day active production plan by production order. Missing plan or completed qualified quantity blocks qualified submission and writes an operation log; special barcode workflows remain separate.
+- Daily production plans are explicitly bound to one selected production line. The uniqueness rule is `businessDate + productionOrderNo + productionLineId`, so the same order can be planned on multiple lines on the same day while each line has at most one plan for that order.
+- Existing inspection records are retained through the additive daily-plan migration. Records created before this change have empty production-order/plan fields and remain available in original inspection queries but are not counted in new order-completion statistics.
 
 ## Roadmap Position
 
@@ -137,9 +141,13 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - 2026-05-25: Updated the clean Windows package baseline database to include 42 active production defect reasons A0-A41 while retaining `BARCODE_DAMAGED/条码污损` for dirty-barcode workflows.
 - 2026-05-25: Adjusted login so administrators and query users do not need to choose a production line, while inspectors remain required to select one.
 - 2026-06-05: Implemented continuous scanning throughput hardening: normal qualified scans enter a sequential frontend queue, successful submissions append returned records locally, and the scanning today-records API returns only the latest 80 rows.
+- 2026-06-05: Implemented production-order daily plan supervision with additive SQLite migration, query/admin plan management, scan-time daily-plan enforcement and audit logs, scan UI plan status display, query order-completion view, and PCR `PCR-20260605-daily-production-plan`.
+- 2026-06-08: Added reopen support for manually closed daily production plans with query/admin API action, frontend table control, and operation-log audit.
+- 2026-06-08: Bound daily production plans to a selected production line, retained one-order-one-line-per-day uniqueness, enforced scan-line matching, and documented PCR `PCR-20260608-daily-plan-production-line-binding`.
+- 2026-06-08: Revised daily plan uniqueness after customer confirmation so one production order can be issued to multiple production lines on the same day; quantities are user-controlled and scan binding uses the current login line.
 
 ## Session Continuity
 
 Last session: 2026-06-05T00:00:00+08:00
-Stopped at: Continuous scanning throughput fix implemented and locally verified; package or field-test next.
+Stopped at: Daily production plan multi-line order allocation implemented and under final verification; package or field-test next after full build passes.
 Resume file: none required unless opening the next milestone workflow.

@@ -1,5 +1,5 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { InspectionResult, Role, SpecialBarcodeType } from '@prisma/client';
+import { DailyProductionPlanStatus, InspectionResult, Role, SpecialBarcodeType } from '@prisma/client';
 import argon2 from 'argon2';
 import cookieParser from 'cookie-parser';
 import { execFileSync } from 'node:child_process';
@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { toBeijingDateString } from '../src/time/beijing-time';
 
 const dbPath = `/private/tmp/scan-scanning-e2e-${process.pid}.db`;
 process.env.DATABASE_URL = `file:${dbPath}`;
@@ -19,6 +20,7 @@ describe('Scanning API', () => {
   let prisma: PrismaService;
   let productionLineId: string;
   let otherProductionLineId: string;
+  let defaultPlanId: string;
   let scratchReasonId: string;
   let dirtyReasonId: string;
   let fetchMock: jest.Mock;
@@ -51,6 +53,21 @@ describe('Scanning API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
+    const dailyPlanMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260605093000_add_daily_production_plans/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: dailyPlanMigrationSql });
+    const dailyPlanLineMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260608131500_add_daily_plan_production_line/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: dailyPlanLineMigrationSql });
+    const dailyPlanMultiLineMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260608134500_allow_daily_plan_multi_line/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: dailyPlanMultiLineMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -71,8 +88,11 @@ describe('Scanning API', () => {
     fetchMock.mockReset();
 
     await prisma.session.deleteMany();
+    await prisma.operationLog.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
+    await prisma.dailyProductionPlan.deleteMany();
+    await prisma.productionOrderCache.deleteMany();
     await prisma.specialBarcode.deleteMany();
     await prisma.defectReason.deleteMany();
     await prisma.user.deleteMany();
@@ -149,6 +169,25 @@ describe('Scanning API', () => {
         }
       ]
     });
+
+    const adminUser = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' } });
+    const defaultPlan = await prisma.dailyProductionPlan.create({
+      data: {
+        businessDate: toBeijingDateString(new Date()),
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-PLAN',
+        productName: '计划测试产品',
+        orderQuantity: 1000,
+        plannedQuantity: 1000,
+        productionLineId,
+        status: DailyProductionPlanStatus.ACTIVE,
+        createdById: adminUser.id,
+        createdByUsername: adminUser.username,
+        updatedById: adminUser.id,
+        updatedByUsername: adminUser.username
+      }
+    });
+    defaultPlanId = defaultPlan.id;
   });
 
   afterAll(async () => {
@@ -229,6 +268,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'QUAL-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-QUAL',
         result: InspectionResult.QUALIFIED
@@ -244,6 +284,8 @@ describe('Scanning API', () => {
     });
 
     expect(record.result).toBe(InspectionResult.QUALIFIED);
+    expect(record.productionOrderNo).toBe('PO-SCAN');
+    expect(record.dailyProductionPlanId).toBe(defaultPlanId);
     expect(record.inspector.username).toBe('inspector');
     expect(record.productionLine.id).toBe(productionLineId);
   });
@@ -255,6 +297,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'DUP-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-DUP',
         result: InspectionResult.QUALIFIED
@@ -265,6 +308,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'DUP-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-DUP',
         result: InspectionResult.QUALIFIED
@@ -295,6 +339,7 @@ describe('Scanning API', () => {
         .post('/scanning/records')
         .send({
           barcode: 'REWORK-000001',
+          productionOrderNo: 'PO-SCAN',
           partNumber: 'PN-000001',
           vehicleModel: '车型-RWK',
           result: InspectionResult.UNQUALIFIED,
@@ -315,6 +360,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'PRIOR-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-PRIOR',
         result: InspectionResult.UNQUALIFIED,
@@ -326,6 +372,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'PRIOR-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-PRIOR',
         result: InspectionResult.QUALIFIED
@@ -352,6 +399,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'LOCKED-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-LOCKED',
         result: InspectionResult.QUALIFIED
@@ -362,6 +410,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'LOCKED-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-LOCKED',
         result: InspectionResult.UNQUALIFIED,
@@ -385,6 +434,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'NO-REASON-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         result: InspectionResult.UNQUALIFIED,
         defectReasonIds: []
@@ -394,14 +444,188 @@ describe('Scanning API', () => {
     expect(response.body.code).toBe('DEFECT_REASON_REQUIRED');
   });
 
+  it('blocks normal scan submissions when the production order has no active daily plan', async () => {
+    const inspector = await login('inspector');
+
+    const response = await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'NO-PLAN-000001',
+        productionOrderNo: 'PO-MISSING',
+        partNumber: 'PN-MISSING',
+        vehicleModel: '车型-缺计划',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: 'DAILY_PLAN_REQUIRED',
+      message: '该订单今日未下达生产计划'
+    });
+
+    await expect(
+      prisma.operationLog.count({
+        where: {
+          module: 'inspection',
+          action: 'SCAN_DAILY_PLAN_MISSING',
+          targetLabel: 'PO-MISSING'
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('blocks additional qualified scans after the daily plan is completed but allows unqualified recording', async () => {
+    const inspector = await login('inspector');
+    await prisma.dailyProductionPlan.update({
+      where: { id: defaultPlanId },
+      data: { plannedQuantity: 1 }
+    });
+
+    await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'PLAN-LIMIT-000001',
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-LIMIT',
+        vehicleModel: '车型-计划完成',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(201);
+
+    const response = await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'PLAN-LIMIT-000002',
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-LIMIT',
+        vehicleModel: '车型-计划完成',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: 'DAILY_PLAN_QUALIFIED_LIMIT_REACHED',
+      message: '该订单今日计划已完成，不能继续录入合格品'
+    });
+
+    await inspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'PLAN-LIMIT-000003',
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-LIMIT',
+        vehicleModel: '车型-计划完成',
+        result: InspectionResult.UNQUALIFIED,
+        defectReasonIds: [scratchReasonId]
+      })
+      .expect(201);
+
+    await expect(
+      prisma.operationLog.count({
+        where: {
+          module: 'inspection',
+          action: 'SCAN_DAILY_PLAN_COMPLETED',
+          targetLabel: 'PO-SCAN'
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('blocks normal scan submissions when the plan belongs to another production line', async () => {
+    const otherInspector = await login('other-inspector', otherProductionLineId);
+
+    const response = await otherInspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'WRONG-LINE-000001',
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-WRONG-LINE',
+        vehicleModel: '车型-错线',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: 'DAILY_PLAN_PRODUCTION_LINE_MISMATCH',
+      message: '该订单未下达到当前产线，不能在当前产线扫码'
+    });
+
+    await expect(
+      prisma.operationLog.count({
+        where: {
+          module: 'inspection',
+          action: 'SCAN_DAILY_PLAN_LINE_MISMATCH',
+          targetLabel: 'PO-SCAN'
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
+  it('binds scans to the current production-line plan when the same order is planned on multiple lines', async () => {
+    const otherInspector = await login('other-inspector', otherProductionLineId);
+    const adminUser = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' } });
+    const otherLinePlan = await prisma.dailyProductionPlan.create({
+      data: {
+        businessDate: toBeijingDateString(new Date()),
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-PLAN',
+        productName: '计划测试产品',
+        orderQuantity: 1000,
+        plannedQuantity: 5,
+        productionLineId: otherProductionLineId,
+        status: DailyProductionPlanStatus.ACTIVE,
+        createdById: adminUser.id,
+        createdByUsername: adminUser.username,
+        updatedById: adminUser.id,
+        updatedByUsername: adminUser.username
+      }
+    });
+
+    await otherInspector
+      .post('/scanning/records')
+      .send({
+        barcode: 'MULTI-LINE-000001',
+        productionOrderNo: 'PO-SCAN',
+        partNumber: 'PN-MULTI',
+        vehicleModel: '车型-多产线',
+        result: InspectionResult.QUALIFIED
+      })
+      .expect(201);
+
+    const record = await prisma.inspectionRecord.findUniqueOrThrow({
+      where: { qualifiedBarcodeKey: 'MULTI-LINE-000001' }
+    });
+    expect(record.productionLineId).toBe(otherProductionLineId);
+    expect(record.dailyProductionPlanId).toBe(otherLinePlan.id);
+  });
+
   it('returns today-records newest first and scoped to the login production line for SCAN-09', async () => {
     const inspector = await login('inspector');
     const otherInspector = await login('other-inspector', otherProductionLineId);
+    const adminUser = await prisma.user.findUniqueOrThrow({ where: { username: 'admin' } });
+
+    await prisma.dailyProductionPlan.create({
+      data: {
+        businessDate: toBeijingDateString(new Date()),
+        productionOrderNo: 'PO-OTHER-LINE',
+        partNumber: 'PN-OTHER',
+        productName: '其他产线产品',
+        orderQuantity: 1000,
+        plannedQuantity: 1000,
+        productionLineId: otherProductionLineId,
+        status: DailyProductionPlanStatus.ACTIVE,
+        createdById: adminUser.id,
+        createdByUsername: adminUser.username,
+        updatedById: adminUser.id,
+        updatedByUsername: adminUser.username
+      }
+    });
 
     await inspector
       .post('/scanning/records')
       .send({
         barcode: 'ORDER-000001',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
         vehicleModel: '车型-OLD',
         result: InspectionResult.UNQUALIFIED,
@@ -413,6 +637,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'OTHER-000001',
+        productionOrderNo: 'PO-OTHER-LINE',
         partNumber: 'PN-OTHER',
         result: InspectionResult.QUALIFIED
       })
@@ -422,6 +647,7 @@ describe('Scanning API', () => {
       .post('/scanning/records')
       .send({
         barcode: 'ORDER-000002',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000002',
         vehicleModel: '车型-NEW',
         result: InspectionResult.QUALIFIED

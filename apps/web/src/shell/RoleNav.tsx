@@ -1,7 +1,7 @@
-import { ClipboardCheck, Database, Search } from 'lucide-react';
+import { CalendarDays, ClipboardCheck, Database, Search } from 'lucide-react';
 import { Role } from '../auth/auth-types';
 
-export type ModuleKey = 'inspection' | 'query' | 'masterData';
+export type ModuleKey = 'inspection' | 'productionPlan' | 'query' | 'masterData';
 
 type ModuleDefinition = {
   key: ModuleKey;
@@ -16,6 +16,12 @@ const modules: ModuleDefinition[] = [
     label: '检验扫描',
     allowedRoles: ['INSPECTOR', 'ADMIN'],
     icon: ClipboardCheck
+  },
+  {
+    key: 'productionPlan',
+    label: '生产计划',
+    allowedRoles: ['QUERY', 'ADMIN'],
+    icon: CalendarDays
   },
   {
     key: 'query',

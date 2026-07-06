@@ -7,6 +7,7 @@ import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
 import { TextInput } from '../components/TextInput';
 import { MasterDataPage } from '../master-data/MasterDataPage';
+import { ProductionPlanPage } from '../production-plan/ProductionPlanPage';
 import { QueryAnalysisPage } from '../query/QueryAnalysisPage';
 import { InspectionScanningPage } from '../scanning/InspectionScanningPage';
 import { getAllowedModules, ModuleKey, RoleNav } from './RoleNav';
@@ -163,6 +164,8 @@ export function AppShell() {
         <main className="app-content" aria-labelledby="module-title">
           {activeModuleDefinition.key === 'inspection' ? (
             <InspectionScanningPage />
+          ) : activeModuleDefinition.key === 'productionPlan' ? (
+            <ProductionPlanPage />
           ) : activeModuleDefinition.key === 'masterData' ? (
             <MasterDataPage />
           ) : activeModuleDefinition.key === 'query' ? (

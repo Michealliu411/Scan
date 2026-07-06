@@ -13,10 +13,21 @@ const defaultLookupUrl =
 type ProductionOrderLookupResponse = {
   ErrCode?: number;
   Message?: string;
-  JsonData?: {
-    成品零件编号?: unknown;
-    成品产品名称?: unknown;
-  };
+  JsonData?: ProductionOrderLookupData;
+} & ProductionOrderLookupData;
+
+type ProductionOrderLookupData = {
+  成品零件编号?: unknown;
+  成品产品名称?: unknown;
+  生产订单号?: unknown;
+  生产订单编号?: unknown;
+  生产订单?: unknown;
+  订单号?: unknown;
+  工单号?: unknown;
+  生产订单数量?: unknown;
+  订单数量?: unknown;
+  生产数量?: unknown;
+  数量?: unknown;
 };
 
 @Injectable()
@@ -43,8 +54,25 @@ export class ProductionOrderScanLookupService implements ScanLookupGateway {
       });
     }
 
-    const partNumber = this.readString(response.JsonData, '成品零件编号');
-    const productName = this.readString(response.JsonData, '成品产品名称');
+    const lookupData = {
+      ...response,
+      ...(response.JsonData ?? {})
+    };
+    const partNumber = this.readString(lookupData, '成品零件编号');
+    const productName = this.readString(lookupData, '成品产品名称');
+    const productionOrderNo = this.readFirstString(lookupData, [
+      '生产订单号',
+      '生产订单编号',
+      '生产订单',
+      '订单号',
+      '工单号'
+    ]);
+    const orderQuantity = this.readFirstNumber(lookupData, [
+      '生产订单数量',
+      '订单数量',
+      '生产数量',
+      '数量'
+    ]);
 
     if (!partNumber || !productName) {
       throw new BadGatewayException({
@@ -57,6 +85,9 @@ export class ProductionOrderScanLookupService implements ScanLookupGateway {
       barcode: trimmedBarcode,
       partNumber,
       vehicleModel: productName,
+      ...(productionOrderNo ? { productionOrderNo } : {}),
+      ...(orderQuantity ? { orderQuantity } : {}),
+      rawData: lookupData,
       source: 'PRODUCTION_ORDER_LOOKUP'
     };
   }
@@ -100,10 +131,39 @@ export class ProductionOrderScanLookupService implements ScanLookupGateway {
   }
 
   private readString(
-    data: ProductionOrderLookupResponse['JsonData'] | undefined,
-    key: keyof NonNullable<ProductionOrderLookupResponse['JsonData']>
+    data: ProductionOrderLookupData | undefined,
+    key: keyof ProductionOrderLookupData
   ): string | null {
     const value = data?.[key];
     return typeof value === 'string' && value.trim() ? value.trim() : null;
+  }
+
+  private readFirstString(
+    data: ProductionOrderLookupData | undefined,
+    keys: Array<keyof ProductionOrderLookupData>
+  ): string | null {
+    for (const key of keys) {
+      const value = this.readString(data, key);
+      if (value) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readFirstNumber(
+    data: ProductionOrderLookupData | undefined,
+    keys: Array<keyof ProductionOrderLookupData>
+  ): number | null {
+    for (const key of keys) {
+      const value = data?.[key];
+      const numberValue = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : NaN;
+      if (Number.isInteger(numberValue) && numberValue > 0) {
+        return numberValue;
+      }
+    }
+
+    return null;
   }
 }

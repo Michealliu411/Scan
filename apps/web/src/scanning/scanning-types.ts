@@ -1,10 +1,29 @@
 export type InspectionResult = 'QUALIFIED' | 'UNQUALIFIED';
+export type DailyPlanScanStatus = 'ACTIVE' | 'CLOSED' | 'MISSING';
+
+export type DailyPlanScanSummary = {
+  status: DailyPlanScanStatus;
+  businessDate: string;
+  productionOrderNo: string;
+  productionLine?: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  plannedQuantity: number;
+  qualifiedCount: number;
+  unqualifiedCount: number;
+  remainingQuantity: number;
+};
 
 export type ResolvedPart = {
   kind?: 'RESOLVED_PART';
   barcode: string;
   partNumber: string;
   vehicleModel: string;
+  productionOrderNo?: string;
+  orderQuantity?: number;
+  dailyPlan?: DailyPlanScanSummary;
   source?: 'SIMULATED_LOOKUP' | 'NO_BARCODE_PRODUCT' | 'PRODUCTION_ORDER_LOOKUP';
 };
 
@@ -33,6 +52,8 @@ export type OperatorOption = {
 export type InspectionDetailRecord = {
   id: string;
   barcode: string;
+  productionOrderNo?: string | null;
+  dailyProductionPlanId?: string | null;
   partNumber: string;
   vehicleModel: string | null;
   result: InspectionResult;
@@ -50,6 +71,7 @@ export type DuplicateQualifiedDetails = {
 
 export type SubmitInspectionRecordPayload = {
   barcode: string;
+  productionOrderNo?: string;
   partNumber: string;
   vehicleModel?: string;
   operatorProfileId?: string;

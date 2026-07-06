@@ -1,8 +1,8 @@
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
-import { InspectionResult, Prisma, SpecialBarcodeType } from '@prisma/client';
+import { DailyProductionPlan, DailyProductionPlanStatus, InspectionResult, Prisma, SpecialBarcodeType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ActiveSessionContext } from '../sessions/sessions.service';
-import { getBeijingDayRange, nowUtc } from '../time/beijing-time';
+import { getBeijingDayRange, nowUtc, toBeijingDateString } from '../time/beijing-time';
 import { CreateInspectionRecordDto } from './dto/create-inspection-record.dto';
 import { SCAN_LOOKUP_GATEWAY, ScanLookupGateway } from './scan-lookup.gateway';
 
@@ -18,6 +18,11 @@ type InspectionRecordWithDetails = Prisma.InspectionRecordGetPayload<{
     };
   };
 }>;
+
+type ActivePlan = Pick<
+  DailyProductionPlan,
+  'id' | 'businessDate' | 'productionOrderNo' | 'plannedQuantity' | 'productionLineId' | 'status'
+>;
 
 @Injectable()
 export class ScanningService {
@@ -48,6 +53,8 @@ export class ScanningService {
         barcode: trimmedBarcode,
         partNumber: 'DIRTY-BARCODE',
         vehicleModel: null,
+        productionOrderNo: null,
+        dailyPlan: null,
         defectReasonIds: [specialBarcode.defectReasonId],
         allowAfterQualified: true
       });
@@ -79,6 +86,7 @@ export class ScanningService {
     return {
       kind: 'RESOLVED_PART',
       ...result,
+      ...(result.productionOrderNo ? { dailyPlan: await this.findTodayPlanSummary(auth, result.productionOrderNo) } : {}),
       source: result.source ?? 'SIMULATED_LOOKUP'
     };
   }
@@ -151,6 +159,7 @@ export class ScanningService {
     const partNumber = dto.partNumber.trim();
     const vehicleModel = dto.vehicleModel?.trim() || null;
     const operatorProfileId = dto.operatorProfileId?.trim() || null;
+    const productionOrderNo = dto.productionOrderNo?.trim() || null;
 
     if (!barcode) {
       throw new BadRequestException({
@@ -183,13 +192,25 @@ export class ScanningService {
       }
     }
 
+    const isSpecialBarcode = await this.isActiveSpecialBarcode(barcode);
+    const dailyPlan = isSpecialBarcode
+      ? null
+      : await this.resolveActivePlanForSubmission(auth, {
+          barcode,
+          partNumber,
+          productionOrderNo,
+          result: dto.result
+        });
+
     if (dto.result === InspectionResult.QUALIFIED) {
       return this.createQualifiedRecord(auth, {
         barcode,
         partNumber,
         vehicleModel,
         operatorProfileId,
-        allowRepeat: await this.isActiveSpecialBarcode(barcode)
+        productionOrderNo,
+        dailyPlan,
+        allowRepeat: isSpecialBarcode
       });
     }
 
@@ -198,8 +219,10 @@ export class ScanningService {
       partNumber,
       vehicleModel,
       operatorProfileId,
+      productionOrderNo,
+      dailyPlan,
       defectReasonIds: dto.defectReasonIds ?? [],
-      allowAfterQualified: await this.isActiveSpecialBarcode(barcode)
+      allowAfterQualified: isSpecialBarcode
     });
   }
 
@@ -210,6 +233,8 @@ export class ScanningService {
       partNumber: string;
       vehicleModel: string | null;
       operatorProfileId: string | null;
+      productionOrderNo: string | null;
+      dailyPlan: ActivePlan | null;
       allowRepeat?: boolean;
     }
   ) {
@@ -227,6 +252,8 @@ export class ScanningService {
           qualifiedBarcodeKey: data.allowRepeat ? null : data.barcode,
           partNumber: data.partNumber,
           vehicleModel: data.vehicleModel,
+          productionOrderNo: data.productionOrderNo,
+          dailyProductionPlanId: data.dailyPlan?.id ?? null,
           productionLineId: auth.productionLine.id,
           inspectorId: auth.user.id,
           operatorProfileId: data.operatorProfileId,
@@ -257,6 +284,8 @@ export class ScanningService {
       partNumber: string;
       vehicleModel: string | null;
       operatorProfileId?: string | null;
+      productionOrderNo: string | null;
+      dailyPlan: ActivePlan | null;
       defectReasonIds: string[];
       allowAfterQualified?: boolean;
     }
@@ -303,6 +332,8 @@ export class ScanningService {
           qualifiedBarcodeKey: null,
           partNumber: data.partNumber,
           vehicleModel: data.vehicleModel,
+          productionOrderNo: data.productionOrderNo,
+          dailyProductionPlanId: data.dailyPlan?.id ?? null,
           productionLineId: auth.productionLine.id,
           inspectorId: auth.user.id,
           operatorProfileId: data.operatorProfileId || null,
@@ -367,6 +398,8 @@ export class ScanningService {
       barcode: record.barcode,
       partNumber: record.partNumber,
       vehicleModel: record.vehicleModel,
+      productionOrderNo: record.productionOrderNo,
+      dailyProductionPlanId: record.dailyProductionPlanId,
       result: record.result,
       deductionAmount: record.deductionAmount.toNumber(),
       scannedAt: record.scannedAt.toISOString(),
@@ -412,5 +445,242 @@ export class ScanningService {
         }
       }
     } satisfies Prisma.InspectionRecordInclude;
+  }
+
+  private async resolveActivePlanForSubmission(
+    auth: ActiveSessionContext,
+    data: {
+      barcode: string;
+      partNumber: string;
+      productionOrderNo: string | null;
+      result: InspectionResult;
+    }
+  ): Promise<ActivePlan> {
+    if (!data.productionOrderNo) {
+      await this.writePlanInterceptLog(auth, {
+        action: 'SCAN_DAILY_PLAN_ORDER_MISSING',
+        targetId: null,
+        targetLabel: data.barcode,
+        barcode: data.barcode,
+        partNumber: data.partNumber,
+        after: { reason: 'productionOrderNoMissing' }
+      });
+      throw new BadRequestException({
+        code: 'PRODUCTION_ORDER_REQUIRED',
+        message: '扫码结果缺少生产订单号，不能按当天计划校验'
+      });
+    }
+
+    const businessDate = toBeijingDateString(nowUtc());
+    const plan = await this.prisma.dailyProductionPlan.findUnique({
+      where: {
+        businessDate_productionOrderNo_productionLineId: {
+          businessDate,
+          productionOrderNo: data.productionOrderNo,
+          productionLineId: auth.productionLine.id
+        }
+      },
+      select: {
+        id: true,
+        businessDate: true,
+        productionOrderNo: true,
+        plannedQuantity: true,
+        productionLineId: true,
+        status: true
+      }
+    });
+
+    if (!plan) {
+      const otherLinePlans = await this.prisma.dailyProductionPlan.findMany({
+        where: {
+          businessDate,
+          productionOrderNo: data.productionOrderNo
+        },
+        select: {
+          id: true,
+          productionOrderNo: true,
+          productionLineId: true
+        }
+      });
+
+      if (otherLinePlans.length) {
+        const firstOtherLinePlan = otherLinePlans[0]!;
+        await this.writePlanInterceptLog(auth, {
+          action: 'SCAN_DAILY_PLAN_LINE_MISMATCH',
+          targetId: firstOtherLinePlan.id,
+          targetLabel: data.productionOrderNo,
+          barcode: data.barcode,
+          partNumber: data.partNumber,
+          after: {
+            businessDate,
+            productionOrderNo: data.productionOrderNo,
+            plannedProductionLineIds: otherLinePlans.map((otherPlan) => otherPlan.productionLineId),
+            scanningProductionLineId: auth.productionLine.id
+          }
+        });
+        throw new ConflictException({
+          code: 'DAILY_PLAN_PRODUCTION_LINE_MISMATCH',
+          message: '该订单未下达到当前产线，不能在当前产线扫码'
+        });
+      }
+
+      await this.writePlanInterceptLog(auth, {
+        action: 'SCAN_DAILY_PLAN_MISSING',
+        targetId: null,
+        targetLabel: data.productionOrderNo,
+        barcode: data.barcode,
+        partNumber: data.partNumber,
+        after: {
+          businessDate,
+          productionOrderNo: data.productionOrderNo,
+          status: null
+        }
+      });
+      throw new ConflictException({
+        code: 'DAILY_PLAN_REQUIRED',
+        message: '该订单今日未下达生产计划'
+      });
+    }
+
+    if (plan.status !== DailyProductionPlanStatus.ACTIVE) {
+      await this.writePlanInterceptLog(auth, {
+        action: 'SCAN_DAILY_PLAN_MISSING',
+        targetId: plan.id,
+        targetLabel: data.productionOrderNo,
+        barcode: data.barcode,
+        partNumber: data.partNumber,
+        after: {
+          businessDate,
+          productionOrderNo: data.productionOrderNo,
+          status: plan.status,
+          productionLineId: plan.productionLineId
+        }
+      });
+      throw new ConflictException({
+        code: 'DAILY_PLAN_REQUIRED',
+        message: '该订单今日未下达生产计划'
+      });
+    }
+
+    if (data.result === InspectionResult.QUALIFIED) {
+      const qualifiedCount = await this.prisma.inspectionRecord.count({
+        where: {
+          dailyProductionPlanId: plan.id,
+          result: InspectionResult.QUALIFIED
+        }
+      });
+
+      if (qualifiedCount >= plan.plannedQuantity) {
+        await this.writePlanInterceptLog(auth, {
+          action: 'SCAN_DAILY_PLAN_COMPLETED',
+          targetId: plan.id,
+          targetLabel: plan.productionOrderNo,
+          barcode: data.barcode,
+          partNumber: data.partNumber,
+          after: {
+            businessDate,
+            productionOrderNo: plan.productionOrderNo,
+            plannedQuantity: plan.plannedQuantity,
+            qualifiedCount
+          }
+        });
+        throw new ConflictException({
+          code: 'DAILY_PLAN_QUALIFIED_LIMIT_REACHED',
+          message: '该订单今日计划已完成，不能继续录入合格品'
+        });
+      }
+    }
+
+    return plan;
+  }
+
+  private async findTodayPlanSummary(auth: ActiveSessionContext, productionOrderNo: string) {
+    const businessDate = toBeijingDateString(nowUtc());
+    const plan = await this.prisma.dailyProductionPlan.findUnique({
+      where: {
+        businessDate_productionOrderNo_productionLineId: {
+          businessDate,
+          productionOrderNo,
+          productionLineId: auth.productionLine.id
+        }
+      },
+      include: {
+        productionLine: {
+          select: {
+            id: true,
+            code: true,
+            name: true
+          }
+        }
+      }
+    });
+
+    if (!plan) {
+      return {
+        businessDate,
+        productionOrderNo,
+        status: 'MISSING',
+        plannedQuantity: 0,
+        qualifiedCount: 0,
+        unqualifiedCount: 0,
+        remainingQuantity: 0,
+        completionRate: 0
+      };
+    }
+
+    const [qualifiedCount, unqualifiedCount] = await Promise.all([
+      this.prisma.inspectionRecord.count({
+        where: {
+          dailyProductionPlanId: plan.id,
+          result: InspectionResult.QUALIFIED
+        }
+      }),
+      this.prisma.inspectionRecord.count({
+        where: {
+          dailyProductionPlanId: plan.id,
+          result: InspectionResult.UNQUALIFIED
+        }
+      })
+    ]);
+
+    return {
+      id: plan.id,
+      businessDate,
+      productionOrderNo,
+      status: plan.status,
+      productionLine: plan.productionLine,
+      plannedQuantity: plan.plannedQuantity,
+      qualifiedCount,
+      unqualifiedCount,
+      remainingQuantity: Math.max(0, plan.plannedQuantity - qualifiedCount),
+      completionRate: plan.plannedQuantity > 0 ? qualifiedCount / plan.plannedQuantity : 0
+    };
+  }
+
+  private async writePlanInterceptLog(
+    auth: ActiveSessionContext,
+    data: {
+      action: string;
+      targetId: string | null;
+      targetLabel: string;
+      barcode: string;
+      partNumber: string;
+      after: unknown;
+    }
+  ) {
+    await this.prisma.operationLog.create({
+      data: {
+        module: 'inspection',
+        action: data.action,
+        targetType: 'dailyProductionPlan',
+        targetId: data.targetId,
+        targetLabel: data.targetLabel,
+        barcode: data.barcode,
+        partNumber: data.partNumber,
+        afterJson: JSON.stringify(data.after),
+        operatorId: auth.user.id,
+        operatorUsername: auth.user.username
+      }
+    });
   }
 }

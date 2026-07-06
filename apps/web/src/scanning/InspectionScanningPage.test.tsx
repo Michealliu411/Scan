@@ -35,11 +35,25 @@ describe('InspectionScanningPage', () => {
       barcode: 'ABC123456',
       partNumber: 'PN-123456',
       vehicleModel: '车型-ABC1',
-      source: 'SIMULATED_LOOKUP'
+      productionOrderNo: 'PO-SCAN',
+      orderQuantity: 100,
+      dailyPlan: {
+        status: 'ACTIVE',
+        businessDate: '2026-05-07',
+        productionOrderNo: 'PO-SCAN',
+        productionLine: { id: 'line-1', code: 'LINE-01', name: '一号线' },
+        plannedQuantity: 80,
+        qualifiedCount: 12,
+        unqualifiedCount: 1,
+        remainingQuantity: 68
+      },
+      source: 'PRODUCTION_ORDER_LOOKUP'
     });
     submitInspectionRecordMock.mockResolvedValue({
       id: 'record-1',
       barcode: 'ABC123456',
+      productionOrderNo: 'PO-SCAN',
+      dailyProductionPlanId: 'plan-1',
       partNumber: 'PN-123456',
       vehicleModel: '车型-ABC1',
       result: 'QUALIFIED',
@@ -58,6 +72,7 @@ describe('InspectionScanningPage', () => {
       expect(lookupBarcodeMock).toHaveBeenCalledWith('ABC123456');
       expect(submitInspectionRecordMock).toHaveBeenCalledWith({
         barcode: 'ABC123456',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-123456',
         vehicleModel: '车型-ABC1',
         result: 'QUALIFIED'
@@ -144,11 +159,13 @@ describe('InspectionScanningPage', () => {
     fireEvent.change(screen.getByLabelText('条码'), { target: { value: 'ABC123456' } });
     fireEvent.keyDown(screen.getByLabelText('条码'), { key: 'Enter' });
     expect(await screen.findByText('PN-123456')).toBeTruthy();
+    expect(screen.getByText('计划产线 一号线')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '提交' }));
 
     await waitFor(() => {
       expect(submitInspectionRecordMock).toHaveBeenCalledWith({
         barcode: 'ABC123456',
+        productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-123456',
         vehicleModel: '车型-ABC1',
         result: 'UNQUALIFIED',
@@ -178,6 +195,7 @@ describe('InspectionScanningPage', () => {
         barcode: 'FAST-001',
         partNumber: 'PN-001',
         vehicleModel: '车型-001',
+        productionOrderNo: 'PO-SCAN',
         source: 'PRODUCTION_ORDER_LOOKUP'
       })
       .mockResolvedValueOnce({
@@ -185,6 +203,7 @@ describe('InspectionScanningPage', () => {
         barcode: 'FAST-002',
         partNumber: 'PN-002',
         vehicleModel: '车型-002',
+        productionOrderNo: 'PO-SCAN',
         source: 'PRODUCTION_ORDER_LOOKUP'
       });
     submitInspectionRecordMock
@@ -197,6 +216,8 @@ describe('InspectionScanningPage', () => {
       .mockResolvedValueOnce({
         id: 'record-2',
         barcode: 'FAST-002',
+        productionOrderNo: 'PO-SCAN',
+        dailyProductionPlanId: 'plan-1',
         partNumber: 'PN-002',
         vehicleModel: '车型-002',
         result: 'QUALIFIED',
@@ -223,6 +244,8 @@ describe('InspectionScanningPage', () => {
       resolveFirstSubmit({
         id: 'record-1',
         barcode: 'FAST-001',
+        productionOrderNo: 'PO-SCAN',
+        dailyProductionPlanId: 'plan-1',
         partNumber: 'PN-001',
         vehicleModel: '车型-001',
         result: 'QUALIFIED',
@@ -265,6 +288,8 @@ describe('InspectionScanningPage', () => {
       {
         id: 'record-2',
         barcode: 'DEF-000002',
+        productionOrderNo: 'PO-DETAIL',
+        dailyProductionPlanId: 'plan-detail',
         partNumber: 'PN-000002',
         vehicleModel: '车型-DEF',
         result: 'UNQUALIFIED',
@@ -278,6 +303,7 @@ describe('InspectionScanningPage', () => {
     const details = await screen.findByRole('region', { name: '今日检验明细' });
     expect(within(details).getByText(/09:02:03|01:02:03/)).toBeTruthy();
     expect(within(details).getByText('DEF-000002')).toBeTruthy();
+    expect(within(details).getByText('PO-DETAIL')).toBeTruthy();
     expect(within(details).getByText('PN-000002')).toBeTruthy();
     expect(within(details).getByText('车型-DEF')).toBeTruthy();
     expect(within(details).getByText('不合格')).toBeTruthy();

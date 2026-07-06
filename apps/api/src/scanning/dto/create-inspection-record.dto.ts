@@ -16,6 +16,10 @@ export class CreateInspectionRecordDto {
 
   @IsString()
   @IsOptional()
+  productionOrderNo?: string;
+
+  @IsString()
+  @IsOptional()
   operatorProfileId?: string;
 
   @IsEnum(InspectionResult)

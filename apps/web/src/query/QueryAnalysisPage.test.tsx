@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryAnalysisPage } from './QueryAnalysisPage';
+import { fetchDailyProductionPlans } from '../production-plan/production-plan-api';
 import {
   fetchDashboard,
   fetchInspectionRecordChangeLogs,
@@ -33,6 +34,10 @@ vi.mock('./query-api', () => ({
   updateUnqualifiedRecordReasons: vi.fn()
 }));
 
+vi.mock('../production-plan/production-plan-api', () => ({
+  fetchDailyProductionPlans: vi.fn()
+}));
+
 const fetchDashboardMock = vi.mocked(fetchDashboard);
 const fetchInspectionRecordChangeLogsMock = vi.mocked(fetchInspectionRecordChangeLogs);
 const fetchDetailRecordsMock = vi.mocked(fetchDetailRecords);
@@ -40,6 +45,7 @@ const fetchQueryDefectReasonsMock = vi.mocked(fetchQueryDefectReasons);
 const fetchQueryProductionLinesMock = vi.mocked(fetchQueryProductionLines);
 const reclassifyInspectionRecordMock = vi.mocked(reclassifyInspectionRecord);
 const updateUnqualifiedRecordReasonsMock = vi.mocked(updateUnqualifiedRecordReasons);
+const fetchDailyProductionPlansMock = vi.mocked(fetchDailyProductionPlans);
 
 describe('QueryAnalysisPage', () => {
   beforeEach(() => {
@@ -158,6 +164,29 @@ describe('QueryAnalysisPage', () => {
       defectReasons: [{ id: 'reason-1', code: 'SCRATCH', name: '划伤' }],
       inspector: { id: 'user-1', username: 'inspector' }
     });
+    fetchDailyProductionPlansMock.mockResolvedValue([
+      {
+        id: 'plan-1',
+        businessDate: '2026-06-05',
+        productionOrderNo: 'PO-COMPLETE-001',
+        partNumber: 'PN-COMPLETE',
+        productName: '订单完成产品',
+        orderQuantity: 100,
+        plannedQuantity: 25,
+        status: 'ACTIVE',
+        closedAt: null,
+        createdAt: '2026-06-05T01:00:00.000Z',
+        updatedAt: '2026-06-05T01:00:00.000Z',
+        createdByUsername: 'query',
+        updatedByUsername: 'query',
+        productionLine: { id: 'line-1', code: 'LINE-01', name: '一号线' },
+        qualifiedCount: 20,
+        unqualifiedCount: 1,
+        remainingQuantity: 5,
+        completionRate: 0.8,
+        productionLines: [{ id: 'line-1', code: 'LINE-01', name: '一号线' }]
+      }
+    ]);
   });
 
   it('renders dashboard totals, line totals as a bar chart, and ECharts regions', async () => {
@@ -165,6 +194,7 @@ describe('QueryAnalysisPage', () => {
 
     expect(await screen.findByRole('heading', { name: '查询分析' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: '统计看板' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: '订单完成' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: '明细查询' })).toBeTruthy();
     expect(await screen.findByText('2026年5月')).toBeTruthy();
     const metrics = screen.getByLabelText('月度指标');
@@ -224,6 +254,31 @@ describe('QueryAnalysisPage', () => {
 
     expect(dashboardRegion.className).not.toContain('query-section--fullscreen');
     expect(screen.getByRole('button', { name: '全屏看板' })).toBeTruthy();
+  });
+
+  it('queries order completion plans from the order completion tab', async () => {
+    render(<QueryAnalysisPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '订单完成' }));
+    await screen.findByText('PO-COMPLETE-001');
+    fireEvent.change(screen.getByLabelText('计划日期'), { target: { value: '2026-06-05' } });
+    fireEvent.change(screen.getByLabelText('状态'), { target: { value: 'ACTIVE' } });
+    fireEvent.change(screen.getByLabelText('生产订单'), { target: { value: 'PO-COMPLETE' } });
+    fireEvent.click(screen.getByRole('button', { name: /查询订单完成/ }));
+
+    await waitFor(() => {
+      expect(fetchDailyProductionPlansMock).toHaveBeenLastCalledWith({
+        date: '2026-06-05',
+        status: 'ACTIVE',
+        productionOrderNo: 'PO-COMPLETE'
+      });
+    });
+
+    const table = await screen.findByRole('table', { name: '订单完成结果' });
+    expect(within(table).getByText('PO-COMPLETE-001')).toBeTruthy();
+    expect(within(table).getByText('订单完成产品')).toBeTruthy();
+    expect(within(table).getByText('20')).toBeTruthy();
+    expect(within(table).getByText('80%')).toBeTruthy();
   });
 
   it('submits detail-query filters and renders all required result fields', async () => {

@@ -8,6 +8,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import request from 'supertest';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { toBeijingDateString } from '../src/time/beijing-time';
 
 const dbPath = `/private/tmp/scan-detail-query-e2e-${process.pid}.db`;
 process.env.DATABASE_URL = `file:${dbPath}`;
@@ -48,6 +49,11 @@ describe('Detail query API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: operationLogMigrationSql });
+    const dailyPlanMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260605093000_add_daily_production_plans/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: dailyPlanMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -312,8 +318,9 @@ describe('Detail query API', () => {
     expect(updated.qualifiedBarcodeKey).toBeNull();
     expect(updated.defectReasonLinks.map((link) => link.defectReasonId)).toEqual([scratchReasonId]);
 
+    const today = toBeijingDateString(new Date());
     const logs = await query
-      .get('/detail-query/change-logs?startDate=2026-05-01&endDate=2026-05-31&barcode=DETAIL-QUALIFIED&operatorUsername=query')
+      .get(`/detail-query/change-logs?startDate=${today}&endDate=${today}&barcode=DETAIL-QUALIFIED&operatorUsername=query`)
       .expect(200);
 
     expect(logs.body.logs).toHaveLength(1);
@@ -354,8 +361,9 @@ describe('Detail query API', () => {
     });
     expect(updated.defectReasonLinks.map((link) => link.defectReasonId)).toEqual([dentReasonId]);
 
+    const today = toBeijingDateString(new Date());
     const logs = await query
-      .get('/detail-query/change-logs?startDate=2026-05-01&endDate=2026-05-31&barcode=DETAIL-NEWEST&operatorUsername=query')
+      .get(`/detail-query/change-logs?startDate=${today}&endDate=${today}&barcode=DETAIL-NEWEST&operatorUsername=query`)
       .expect(200);
 
     expect(logs.body.logs).toHaveLength(1);

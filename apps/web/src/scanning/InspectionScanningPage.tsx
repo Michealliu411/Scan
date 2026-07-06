@@ -13,6 +13,7 @@ import {
 import {
   DefectReasonOption,
   DuplicateQualifiedDetails,
+  DailyPlanScanStatus,
   InspectionDetailRecord,
   InspectionResult,
   OperatorOption,
@@ -205,7 +206,10 @@ export function InspectionScanningPage() {
       const part = {
         barcode: result.barcode,
         partNumber: result.partNumber,
-        vehicleModel: result.vehicleModel
+        vehicleModel: result.vehicleModel,
+        productionOrderNo: result.productionOrderNo,
+        orderQuantity: result.orderQuantity,
+        dailyPlan: result.dailyPlan
       };
       if (shouldAutoSubmitQualified) {
         setResolvedPart(null);
@@ -270,6 +274,7 @@ export function InspectionScanningPage() {
     try {
       const createdRecord = await submitInspectionRecord({
         barcode: part.barcode,
+        productionOrderNo: part.productionOrderNo,
         partNumber: part.partNumber,
         vehicleModel: part.vehicleModel,
         result,
@@ -404,6 +409,22 @@ export function InspectionScanningPage() {
                     <div className="scan-resolved__caption">车型</div>
                     <div className="scan-vehicle-model">{resolvedPart.vehicleModel}</div>
                   </div>
+                  {resolvedPart.productionOrderNo ? (
+                    <div>
+                      <div className="scan-resolved__caption">生产订单</div>
+                      <div className="scan-part-number">{resolvedPart.productionOrderNo}</div>
+                    </div>
+                  ) : null}
+                  {resolvedPart.dailyPlan ? (
+                    <div className="scan-daily-plan" aria-label="日计划状态">
+                      <span>{formatDailyPlanStatus(resolvedPart.dailyPlan.status)}</span>
+                      {resolvedPart.dailyPlan.productionLine ? (
+                        <span>计划产线 {resolvedPart.dailyPlan.productionLine.name}</span>
+                      ) : null}
+                      <strong>{resolvedPart.dailyPlan.qualifiedCount} / {resolvedPart.dailyPlan.plannedQuantity}</strong>
+                      <span>剩余 {resolvedPart.dailyPlan.remainingQuantity}</span>
+                    </div>
+                  ) : null}
                   <div className="scan-resolved__barcode">条码 {resolvedPart.barcode}</div>
                 </div>
               ) : null}
@@ -546,6 +567,7 @@ export function InspectionScanningPage() {
                   <div className="scan-detail-row__main">
                     <div className="scan-detail-row__barcode">{record.barcode}</div>
                     <div className="scan-detail-row__meta">
+                      {record.productionOrderNo ? <span>{record.productionOrderNo}</span> : null}
                       <span>{record.partNumber}</span>
                       <span>{record.vehicleModel || '未记录车型'}</span>
                     </div>
@@ -656,4 +678,13 @@ function formatScanTime(value: string): string {
     second: '2-digit',
     hour12: false
   }).format(new Date(value));
+}
+
+function formatDailyPlanStatus(status: DailyPlanScanStatus): string {
+  const labels = {
+    ACTIVE: '计划执行中',
+    CLOSED: '计划已关闭',
+    MISSING: '未下达计划'
+  };
+  return labels[status];
 }

@@ -883,6 +883,22 @@ h1 {
   font-size: 13px;
 }
 
+.scan-daily-plan {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  color: var(--color-accent);
+  background: var(--color-info-bg);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+  border-radius: var(--radius-control);
+}
+
+.scan-daily-plan strong {
+  color: var(--color-text);
+}
+
 .status-badge {
   display: inline-flex;
   min-height: 24px;
@@ -962,6 +978,96 @@ h1 {
 .query-page {
   display: grid;
   gap: var(--space-lg);
+}
+
+.production-plan-page {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.plan-summary {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.plan-workspace {
+  display: grid;
+  align-items: start;
+  gap: var(--space-md);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.plan-panel {
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.plan-entry-panel,
+.plan-order-panel {
+  grid-column: span 2;
+}
+
+.plan-order-preview {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.plan-order-preview > div {
+  display: grid;
+  gap: 2px;
+  min-height: 72px;
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.plan-order-preview span {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.plan-order-preview strong {
+  overflow-wrap: anywhere;
+}
+
+.plan-submit-row {
+  display: grid;
+  align-items: end;
+  gap: var(--space-md);
+  grid-template-columns: minmax(180px, 1fr) auto;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.plan-submit-button {
+  min-width: 132px;
+  color: #FFFFFF;
+}
+
+.plan-table {
+  min-width: 1320px;
+}
+
+.plan-quantity-input {
+  width: 104px;
+  height: 36px;
+  padding: 0 10px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+}
+
+.plan-line-select {
+  min-width: 128px;
+  width: 100%;
 }
 
 .query-header {
@@ -1326,8 +1432,17 @@ h1 {
 
   .query-kpi-grid,
   .query-chart-grid,
-  .query-filter-grid {
+  .query-filter-grid,
+  .plan-summary,
+  .plan-workspace,
+  .plan-order-preview,
+  .plan-submit-row {
     grid-template-columns: 1fr;
+  }
+
+  .plan-entry-panel,
+  .plan-order-panel {
+    grid-column: span 1;
   }
 
   .master-data-search,

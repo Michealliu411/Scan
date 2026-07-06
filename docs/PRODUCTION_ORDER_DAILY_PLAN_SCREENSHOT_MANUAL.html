@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>生产订单日计划软件操作说明</title>
+  <style>
+    :root {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      color: #172033;
+      background: #f3f5f8;
+      line-height: 1.65;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f3f5f8;
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    header {
+      background: #ffffff;
+      border: 1px solid #d8dee6;
+      border-radius: 8px;
+      padding: 28px;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 22px;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 18px;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    .lead {
+      color: #475569;
+      font-size: 16px;
+    }
+
+    .box {
+      background: #ffffff;
+      border: 1px solid #d8dee6;
+      border-radius: 8px;
+      padding: 22px;
+      margin: 18px 0;
+    }
+
+    .important {
+      border-left: 5px solid #2563eb;
+      background: #eff6ff;
+      padding: 14px 16px;
+      font-weight: 700;
+      margin: 16px 0;
+    }
+
+    .warning {
+      border-left: 5px solid #d97706;
+      background: #fffbeb;
+      padding: 14px 16px;
+      font-weight: 700;
+      margin: 16px 0;
+    }
+
+    ol, ul {
+      padding-left: 1.4em;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    figure {
+      margin: 18px 0 26px;
+      border: 1px solid #d8dee6;
+      background: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    figcaption {
+      padding: 10px 14px;
+      background: #f8fafc;
+      color: #475569;
+      font-size: 14px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid #d8dee6;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+    }
+
+    code {
+      background: #e2e8f0;
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    .steps {
+      counter-reset: step;
+      display: grid;
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .step {
+      position: relative;
+      padding: 12px 12px 12px 46px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>生产订单日计划软件操作说明</h1>
+      <p class="lead">适用于现场查询用户、管理员和检验员。本文只讲软件怎么操作：如何扫描产品标签解析订单、如何下达计划、如何在检验扫描和订单完成里查看结果。</p>
+    </header>
+
+    <section class="box">
+      <h2>先说清楚：扫什么码</h2>
+      <div class="important">下达生产计划时，扫的是产品标签，也就是页面里的“水洗条码”。不要扫生产订单号。</div>
+      <p>软件会把产品标签发送到订单解析接口，接口返回后，页面会显示生产订单、零件号、产品名称和订单数量。只有解析成功，并选择计划产线后，才能下达当天计划。</p>
+      <table>
+        <thead>
+          <tr><th>操作</th><th>使用页面</th><th>使用人员</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>扫描产品标签解析生产订单</td><td>生产计划</td><td>查询用户、管理员</td></tr>
+          <tr><td>下达或调整今日计划</td><td>生产计划</td><td>查询用户、管理员</td></tr>
+          <tr><td>按计划扫码检验</td><td>检验扫描</td><td>检验员、管理员</td></tr>
+          <tr><td>查看订单完成情况</td><td>查询分析 - 订单完成</td><td>查询用户、管理员</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="box">
+      <h2>一、扫描产品标签解析订单</h2>
+      <div class="steps">
+        <div class="step">登录系统后，点击左侧菜单 <strong>生产计划</strong>。</div>
+        <div class="step">在 <strong>下达日计划</strong> 区域，先选择 <strong>计划产线</strong>。</div>
+        <div class="step">点击 <strong>水洗条码</strong> 输入框，用扫码枪扫描产品标签。如果扫码枪没有自动回车，就点击 <strong>查询订单</strong>。</div>
+        <div class="step">页面出现生产订单、零件号、产品名称和订单数量后，说明订单解析成功。</div>
+      </div>
+      <figure>
+        <img src="assets/production-order-daily-plan-manual/01-plan-lookup.png" alt="在生产计划页面扫描水洗条码并解析生产订单" />
+        <figcaption>截图 1：扫产品标签后，系统解析出生产订单和订单数量。</figcaption>
+      </figure>
+      <div class="warning">如果页面提示“生产订单查询失败”或“缺少生产订单号或订单数量”，先确认扫的是产品标签，不是订单号。</div>
+    </section>
+
+    <section class="box">
+      <h2>二、下达当天计划</h2>
+      <div class="steps">
+        <div class="step">确认解析出的生产订单和产品名称无误。</div>
+        <div class="step">确认 <strong>计划产线</strong> 是当天实际生产这张订单的产线。</div>
+        <div class="step">在 <strong>今日计划数</strong> 中填写当天要生产的数量。</div>
+        <div class="step">点击 <strong>下达计划</strong>。</div>
+        <div class="step">下方生产计划列表出现该订单后，计划生效。</div>
+      </div>
+      <figure>
+        <img src="assets/production-order-daily-plan-manual/02-plan-list.png" alt="生产计划列表显示已下达订单和完成情况" />
+        <figcaption>截图 2：计划下达后，可以在列表里看今日计划、合格不合格、剩余和完成率。</figcaption>
+      </figure>
+      <p>同一个生产订单当天可以下达到多条产线；同一个订单在同一条产线上只能有一条计划。如果同订单同产线已经下达过，不要重复下达，直接在列表里修改 <strong>今日计划</strong> 或 <strong>产线</strong>，然后点击 <strong>保存</strong>。数量由用户自己控制。</p>
+    </section>
+
+    <section class="box">
+      <h2>三、检验扫码时查看订单计划</h2>
+      <div class="steps">
+        <div class="step">检验员登录时选择当前产线，进入 <strong>检验扫描</strong>。</div>
+        <div class="step">在 <strong>条码</strong> 输入框扫描产品标签。</div>
+        <div class="step">解析成功后，页面显示零件号、车型、生产订单、日计划状态和计划产线。</div>
+        <div class="step">合格扫码会增加该订单的合格完成数；不合格记录保留，但不占用合格计划数。</div>
+      </div>
+      <figure>
+        <img src="assets/production-order-daily-plan-manual/03-scan-status.png" alt="检验扫描页面显示生产订单和日计划状态" />
+        <figcaption>截图 3：检验扫码时可以看到该生产订单的日计划完成情况。</figcaption>
+      </figure>
+      <div class="important">如果当天没有给这个订单下达计划，或当前登录产线不是该订单计划产线，普通产品标签扫码会被系统拦截。需要先到“生产计划”下达或调整日计划。</div>
+    </section>
+
+    <section class="box">
+      <h2>四、查询订单完成情况</h2>
+      <div class="steps">
+        <div class="step">点击左侧菜单 <strong>查询分析</strong>。</div>
+        <div class="step">打开 <strong>订单完成</strong> 标签页。</div>
+        <div class="step">选择计划日期，可按状态或生产订单过滤。</div>
+        <div class="step">点击 <strong>查询订单完成</strong>，查看合格数、不合格数、剩余数和完成率。</div>
+      </div>
+      <figure>
+        <img src="assets/production-order-daily-plan-manual/04-order-completion.png" alt="查询分析里的订单完成列表" />
+        <figcaption>截图 4：订单完成页面用于查看每个生产订单当天的完成情况。</figcaption>
+      </figure>
+      <p>需要导出时，点击 <strong>导出Excel</strong>，系统会生成 <code>订单完成.xlsx</code>。</p>
+    </section>
+
+    <section class="box">
+      <h2>常见情况</h2>
+      <h3>1. 扫码后没有自动查询</h3>
+      <p>扫码枪可能没有配置回车后缀。可以先手动点击 <strong>查询订单</strong>，再让设备人员配置扫码后自动回车。</p>
+
+      <h3>2. 检验扫码提示没有当天计划</h3>
+      <p>说明该生产订单当天还没有日计划。查询用户或管理员进入 <strong>生产计划</strong>，扫同一张产品标签并下达计划后，检验员再扫码。</p>
+
+      <h3>3. 检验扫码提示计划已完成</h3>
+      <p>说明该订单合格数已经达到今日计划数。如果现场要追加生产，在 <strong>生产计划</strong> 列表里调大今日计划数并保存。</p>
+
+      <h3>4. 检验扫码提示订单未下达到当前产线</h3>
+      <p>先确认检验员登录时选择的产线是否正确。若生产安排确实变更，查询用户或管理员进入 <strong>生产计划</strong>，找到该订单，调整 <strong>产线</strong> 并保存。</p>
+
+      <h3>5. 订单解析失败</h3>
+      <p>先确认扫的是产品标签。若同一类标签都失败，需要检查上游订单解析接口是否有该标签对应的生产订单和订单数量。</p>
+    </section>
+  </main>
+</body>
+</html>

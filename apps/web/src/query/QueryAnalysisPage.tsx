@@ -5,6 +5,8 @@ import { Alert } from '../components/Alert';
 import { Button } from '../components/Button';
 import { Select } from '../components/Select';
 import { TextInput } from '../components/TextInput';
+import { fetchDailyProductionPlans } from '../production-plan/production-plan-api';
+import { DailyProductionPlan, ProductionPlanFilters } from '../production-plan/production-plan-types';
 import {
   fetchDashboard,
   fetchInspectionRecordChangeLogs,
@@ -26,11 +28,15 @@ import {
   ProductionLineOption
 } from './query-types';
 
-type QueryTab = 'dashboard' | 'details' | 'logs';
+type QueryTab = 'dashboard' | 'orderCompletion' | 'details' | 'logs';
 
 const resultLabels: Record<InspectionResult, string> = {
   QUALIFIED: '合格',
   UNQUALIFIED: '不合格'
+};
+const planStatusLabels = {
+  ACTIVE: '执行中',
+  CLOSED: '已关闭'
 };
 
 export function QueryAnalysisPage() {
@@ -41,6 +47,15 @@ export function QueryAnalysisPage() {
   const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({});
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [orderCompletionFilters, setOrderCompletionFilters] = useState<ProductionPlanFilters>({
+    date: getTodayDateInputValue(),
+    status: '',
+    productionOrderNo: ''
+  });
+  const [orderCompletionPlans, setOrderCompletionPlans] = useState<DailyProductionPlan[]>([]);
+  const [orderCompletionLoading, setOrderCompletionLoading] = useState(false);
+  const [orderCompletionError, setOrderCompletionError] = useState<string | null>(null);
+  const [orderCompletionLoaded, setOrderCompletionLoaded] = useState(false);
   const [detailFilters, setDetailFilters] = useState<DetailQueryFilters>({
     startDate: getTodayDateInputValue(),
     endDate: getTodayDateInputValue(),
@@ -127,6 +142,15 @@ export function QueryAnalysisPage() {
     };
   }, [dashboardFilters]);
 
+  useEffect(() => {
+    if (activeTab !== 'orderCompletion' || orderCompletionLoaded) {
+      return;
+    }
+
+    setOrderCompletionLoaded(true);
+    void handleOrderCompletionSearch();
+  }, [activeTab, orderCompletionLoaded]);
+
   async function handleDetailSearch(nextFilters = detailFilters) {
     setDetailLoading(true);
     setDetailError(null);
@@ -139,6 +163,19 @@ export function QueryAnalysisPage() {
       setDetailError('明细查询失败，请检查筛选条件后重试');
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function handleOrderCompletionSearch(nextFilters = orderCompletionFilters) {
+    setOrderCompletionLoading(true);
+    setOrderCompletionError(null);
+
+    try {
+      setOrderCompletionPlans(await fetchDailyProductionPlans(nextFilters));
+    } catch {
+      setOrderCompletionError('订单完成查询失败，请检查筛选条件后重试');
+    } finally {
+      setOrderCompletionLoading(false);
     }
   }
 
@@ -210,6 +247,15 @@ export function QueryAnalysisPage() {
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === 'orderCompletion'}
+          className={['master-tabs__button', activeTab === 'orderCompletion' ? 'master-tabs__button--active' : ''].filter(Boolean).join(' ')}
+          onClick={() => setActiveTab('orderCompletion')}
+        >
+          订单完成
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === 'logs'}
           className={['master-tabs__button', activeTab === 'logs' ? 'master-tabs__button--active' : ''].filter(Boolean).join(' ')}
           onClick={() => setActiveTab('logs')}
@@ -229,6 +275,16 @@ export function QueryAnalysisPage() {
             setDashboardFilters(productionLineId ? { productionLineId } : {})
           }
           onExport={() => exportDashboard(dashboard)}
+        />
+      ) : activeTab === 'orderCompletion' ? (
+        <OrderCompletionTab
+          filters={orderCompletionFilters}
+          loading={orderCompletionLoading}
+          error={orderCompletionError}
+          plans={orderCompletionPlans}
+          onFilterChange={setOrderCompletionFilters}
+          onSearch={handleOrderCompletionSearch}
+          onExport={() => exportDailyPlans(orderCompletionPlans)}
         />
       ) : activeTab === 'details' ? (
         <DetailQueryTab
@@ -733,6 +789,124 @@ function DetailQueryTab({
   );
 }
 
+function OrderCompletionTab({
+  filters,
+  loading,
+  error,
+  plans,
+  onFilterChange,
+  onSearch,
+  onExport
+}: {
+  filters: ProductionPlanFilters;
+  loading: boolean;
+  error: string | null;
+  plans: DailyProductionPlan[];
+  onFilterChange: (filters: ProductionPlanFilters) => void;
+  onSearch: () => void;
+  onExport: () => void;
+}) {
+  function updateFilter(key: keyof ProductionPlanFilters, value: string) {
+    onFilterChange({ ...filters, [key]: value });
+  }
+
+  return (
+    <section className="query-section" aria-label="订单完成内容">
+      {error ? <Alert variant="error">{error}</Alert> : null}
+
+      <form
+        className="query-filter-grid"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSearch();
+        }}
+      >
+        <TextInput
+          label="计划日期"
+          type="date"
+          value={filters.date ?? ''}
+          onChange={(event) => updateFilter('date', event.target.value)}
+        />
+        <Select
+          label="状态"
+          value={filters.status ?? ''}
+          onChange={(event) => updateFilter('status', event.target.value)}
+        >
+          <option value="">全部</option>
+          <option value="ACTIVE">执行中</option>
+          <option value="CLOSED">已关闭</option>
+        </Select>
+        <TextInput
+          label="生产订单"
+          value={filters.productionOrderNo ?? ''}
+          onChange={(event) => updateFilter('productionOrderNo', event.target.value)}
+        />
+        <div className="query-filter-actions">
+          <Button type="submit" loading={loading} loadingLabel="查询中...">
+            <Search size={16} strokeWidth={2} aria-hidden="true" />
+            查询订单完成
+          </Button>
+          <Button type="button" variant="secondary" disabled={!plans.length} onClick={onExport}>
+            <Download size={16} strokeWidth={2} aria-hidden="true" />
+            导出Excel
+          </Button>
+        </div>
+      </form>
+
+      <div className="master-table-wrap">
+        <table className="master-table plan-table" aria-label="订单完成结果">
+          <thead>
+            <tr>
+              <th>状态</th>
+              <th>生产订单</th>
+              <th>产品</th>
+              <th>订单数量</th>
+              <th>日计划数</th>
+              <th>合格数</th>
+              <th>不合格数</th>
+              <th>剩余数</th>
+              <th>完成率</th>
+              <th>产线</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plans.length ? (
+              plans.map((plan) => (
+                <tr key={plan.id}>
+                  <td>
+                    <span className={['status-badge', plan.status === 'ACTIVE' ? 'status-badge--active' : 'status-badge--inactive'].join(' ')}>
+                      {planStatusLabels[plan.status]}
+                    </span>
+                  </td>
+                  <td className="query-breakable">
+                    {plan.productionOrderNo}
+                    <span className="table-subtext">{plan.businessDate}</span>
+                  </td>
+                  <td>
+                    {plan.productName}
+                    <span className="table-subtext">{plan.partNumber}</span>
+                  </td>
+                  <td>{plan.orderQuantity}</td>
+                  <td>{plan.plannedQuantity}</td>
+                  <td>{plan.qualifiedCount}</td>
+                  <td>{plan.unqualifiedCount}</td>
+                  <td>{plan.remainingQuantity}</td>
+                  <td>{formatCompletionRate(plan.completionRate)}</td>
+                  <td>{plan.productionLines.map((line) => line.name).join('、') || '-'}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={10}>没有符合条件的订单完成记录</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function ChangeLogTab({
   changeLogError,
   changeLogFilters,
@@ -980,6 +1154,10 @@ function formatOperationChange(log: InspectionRecordChangeLog): string {
   return `${actionLabels[log.action] ?? log.action} ${targetLabels[log.targetType] ?? log.targetType}：${log.targetLabel}`;
 }
 
+function formatCompletionRate(value: number): string {
+  return `${Math.round(value * 1000) / 10}%`;
+}
+
 function getTodayDateInputValue(): string {
   const parts = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -1037,6 +1215,25 @@ async function exportDetailRecords(records: DetailRecord[]) {
       操作工类型: record.operatorProfile?.employmentType === 'LABOR' ? '劳务工' : record.operatorProfile ? '正式工' : '',
       扣款金额: record.deductionAmount ?? 0,
       检验员: record.inspector.username
+    }))
+  });
+}
+
+async function exportDailyPlans(plans: DailyProductionPlan[]) {
+  await writeWorkbook('订单完成.xlsx', {
+    订单完成: plans.map((plan) => ({
+      计划日期: plan.businessDate,
+      状态: planStatusLabels[plan.status],
+      生产订单: plan.productionOrderNo,
+      产品名称: plan.productName,
+      零件号: plan.partNumber,
+      订单数量: plan.orderQuantity,
+      日计划数: plan.plannedQuantity,
+      合格数: plan.qualifiedCount,
+      不合格数: plan.unqualifiedCount,
+      剩余数: plan.remainingQuantity,
+      完成率: formatCompletionRate(plan.completionRate),
+      产线: plan.productionLines.map((line) => line.name).join('、')
     }))
   });
 }

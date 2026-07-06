@@ -32,6 +32,10 @@ vi.mock('../query/QueryAnalysisPage', () => ({
   QueryAnalysisPage: () => <h1 id="module-title">查询分析</h1>
 }));
 
+vi.mock('../production-plan/ProductionPlanPage', () => ({
+  ProductionPlanPage: () => <h1 id="module-title">生产计划</h1>
+}));
+
 vi.mock('../master-data/MasterDataPage', () => ({
   MasterDataPage: () => <h1 id="module-title">基础数据</h1>
 }));
@@ -75,8 +79,10 @@ describe('AppShell', () => {
 
     const nav = screen.getByRole('navigation', { name: '主导航' });
     expect(within(nav).queryByRole('button', { name: /检验扫描/ })).toBeNull();
+    expect(within(nav).getByRole('button', { name: /生产计划/ })).toBeTruthy();
     expect(within(nav).getByRole('button', { name: /查询分析/ })).toBeTruthy();
     expect(within(nav).queryByRole('button', { name: /基础数据/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: '生产计划' })).toBeTruthy();
   });
 
   it('starts with the sidebar collapsed and persists explicit expansion', () => {

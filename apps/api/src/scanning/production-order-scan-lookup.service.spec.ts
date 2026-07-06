@@ -21,8 +21,10 @@ describe('ProductionOrderScanLookupService', () => {
         ErrCode: 200,
         Message: '查询成功！',
         JsonData: {
+          生产订单号: 'PO-20260605-001',
           成品零件编号: '88460CC280',
-          成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH"
+          成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+          订单数量: '320'
         }
       })
     );
@@ -30,11 +32,21 @@ describe('ProductionOrderScanLookupService', () => {
       configService({ SCAN_LOOKUP_URL: lookupUrl })
     );
 
-    await expect(service.lookup(' SHUIXI-001 ')).resolves.toEqual({
+    const result = await service.lookup(' SHUIXI-001 ');
+
+    expect(result).toMatchObject({
       barcode: 'SHUIXI-001',
       partNumber: '88460CC280',
       vehicleModel: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      productionOrderNo: 'PO-20260605-001',
+      orderQuantity: 320,
       source: 'PRODUCTION_ORDER_LOOKUP'
+    });
+    expect(result.rawData).toMatchObject({
+      生产订单号: 'PO-20260605-001',
+      成品零件编号: '88460CC280',
+      成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      订单数量: '320'
     });
 
     expect(fetchMock).toHaveBeenCalledWith(lookupUrl, {
@@ -43,6 +55,58 @@ describe('ProductionOrderScanLookupService', () => {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ Code: 'SHUIXI-001' })
+    });
+  });
+
+  it('maps the live intranet lookup response fields into scan part information', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ErrCode: 200,
+        Message: '查询成功！',
+        生产订单ID: 16444,
+        生产订单UUID: '6e3bcb1d-3ef9-415a-ad39-11b4d316a333',
+        生产订单编号: 'MO202606050008',
+        生产订单单据日期: 46179.0,
+        成品零件ID: 618255,
+        成品零件编号: '3GB881405KNUB',
+        成品产品名称: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+        JsonData: {
+          id: 2850338,
+          生产订单ID: 16444,
+          UUID: '6e3bcb1d-3ef9-415a-ad39-11b4d316a333',
+          生产订单编号: 'MO202606050008',
+          生产订单单据日期: '2026-06-06T00:00:00',
+          成品零件编号: '3GB881405KNUB',
+          成品产品名称: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+          生产订单数量: 280,
+          成品零件ID: 618255
+        }
+      })
+    );
+    const service = new ProductionOrderScanLookupService(
+      configService({ SCAN_LOOKUP_URL: lookupUrl })
+    );
+
+    const result = await service.lookup('3GB881405KNUB 02ST660SKDC17');
+
+    expect(result).toMatchObject({
+      barcode: '3GB881405KNUB 02ST660SKDC17',
+      partNumber: '3GB881405KNUB',
+      vehicleModel: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+      productionOrderNo: 'MO202606050008',
+      orderQuantity: 280,
+      source: 'PRODUCTION_ORDER_LOOKUP'
+    });
+    expect(result.rawData).toMatchObject({
+      id: 2850338,
+      生产订单ID: 16444,
+      UUID: '6e3bcb1d-3ef9-415a-ad39-11b4d316a333',
+      生产订单编号: 'MO202606050008',
+      生产订单单据日期: '2026-06-06T00:00:00',
+      成品零件编号: '3GB881405KNUB',
+      成品产品名称: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+      生产订单数量: 280,
+      成品零件ID: 618255
     });
   });
 

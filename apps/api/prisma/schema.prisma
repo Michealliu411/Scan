@@ -28,6 +28,11 @@ enum OperatorEmploymentType {
   LABOR
 }
 
+enum DailyProductionPlanStatus {
+  ACTIVE
+  CLOSED
+}
+
 model User {
   id                 String             @id @default(cuid())
   username           String             @unique
@@ -73,6 +78,7 @@ model ProductionLine {
   updatedAt         DateTime           @updatedAt
   sessions          Session[]
   inspectionRecords InspectionRecord[]
+  dailyProductionPlans DailyProductionPlan[]
 }
 
 model DefectReason {
@@ -125,6 +131,8 @@ model InspectionRecord {
   qualifiedBarcodeKey String?                        @unique
   partNumber          String
   vehicleModel        String?
+  productionOrderNo   String?
+  dailyProductionPlanId String?
   productionLineId    String
   inspectorId         String
   operatorProfileId   String?
@@ -139,9 +147,52 @@ model InspectionRecord {
   changeLogs          InspectionRecordChangeLog[]
 
   @@index([barcode])
+  @@index([productionOrderNo])
+  @@index([dailyProductionPlanId])
   @@index([productionLineId, scannedAt])
   @@index([inspectorId])
   @@index([operatorProfileId])
+}
+
+model ProductionOrderCache {
+  id                String   @id @default(cuid())
+  productionOrderNo String   @unique
+  barcode           String?
+  partNumber        String
+  productName       String
+  orderQuantity     Int
+  rawJson           String?
+  fetchedAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([barcode])
+  @@index([partNumber])
+}
+
+model DailyProductionPlan {
+  id                String                    @id @default(cuid())
+  businessDate      String
+  productionOrderNo String
+  partNumber        String
+  productName       String
+  orderQuantity     Int
+  plannedQuantity   Int
+  productionLineId  String
+  status            DailyProductionPlanStatus @default(ACTIVE)
+  closedAt          DateTime?
+  createdById       String
+  createdByUsername String
+  updatedById       String
+  updatedByUsername String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  productionLine    ProductionLine            @relation(fields: [productionLineId], references: [id])
+
+  @@unique([businessDate, productionOrderNo, productionLineId])
+  @@index([businessDate])
+  @@index([productionOrderNo])
+  @@index([productionLineId])
+  @@index([status])
 }
 
 model InspectionRecordChangeLog {

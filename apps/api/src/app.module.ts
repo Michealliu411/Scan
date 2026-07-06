@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DetailQueryModule } from './detail-query/detail-query.module';
 import { MasterDataModule } from './master-data/master-data.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { ProductionPlansModule } from './production-plans/production-plans.module';
 import { ProductionLinesModule } from './production-lines/production-lines.module';
 import { ScanningModule } from './scanning/scanning.module';
 import { SessionsModule } from './sessions/sessions.module';
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module';
     SessionsModule,
     AuthModule,
     ScanningModule,
+    ProductionPlansModule,
     AnalyticsModule,
     DetailQueryModule,
     MasterDataModule
