@@ -51,6 +51,39 @@ export type DashboardResponse = {
   }>;
 };
 
+export type QualityDailyReportFilters = {
+  year?: number;
+  month?: number;
+  productionLineId?: string;
+};
+
+export type QualityDailyReportResponse = {
+  period: {
+    year: number;
+    month: number;
+    startUtc: string;
+    endUtc: string;
+  };
+  workshop: '缝纫';
+  process: '缝纫';
+  defectReasons: Array<{ id: string; code: string; name: string }>;
+  rows: Array<{
+    businessDate: string;
+    productionLineId: string;
+    productionLineCode: string;
+    productionLineName: string;
+    vehicleModel: string | null;
+    partName: string | null;
+    workshop: '缝纫';
+    process: '缝纫';
+    productionQuantity: number;
+    qualifiedQuantity: number;
+    unqualifiedQuantity: number;
+    qualifiedRate: number;
+    defectCounts: Record<string, number>;
+  }>;
+};
+
 export type DetailQueryFilters = {
   startDate?: string;
   endDate?: string;

@@ -9,6 +9,7 @@ import { fetchDailyProductionPlans } from '../production-plan/production-plan-ap
 import { DailyProductionPlan, ProductionPlanFilters } from '../production-plan/production-plan-types';
 import {
   fetchDashboard,
+  fetchQualityDailyReport,
   fetchInspectionRecordChangeLogs,
   fetchDetailRecords,
   fetchQueryDefectReasons,
@@ -25,10 +26,12 @@ import {
   DetailRecord,
   InspectionRecordChangeLog,
   InspectionResult,
-  ProductionLineOption
+  ProductionLineOption,
+  QualityDailyReportFilters,
+  QualityDailyReportResponse
 } from './query-types';
 
-type QueryTab = 'dashboard' | 'orderCompletion' | 'details' | 'logs';
+type QueryTab = 'dashboard' | 'qualityReport' | 'orderCompletion' | 'details' | 'logs';
 
 const resultLabels: Record<InspectionResult, string> = {
   QUALIFIED: '合格',
@@ -47,6 +50,13 @@ export function QueryAnalysisPage() {
   const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({});
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [qualityReportFilters, setQualityReportFilters] = useState<QualityDailyReportFilters>(() => ({
+    ...getCurrentBeijingYearMonth(),
+    productionLineId: ''
+  }));
+  const [qualityReport, setQualityReport] = useState<QualityDailyReportResponse | null>(null);
+  const [qualityReportLoading, setQualityReportLoading] = useState(false);
+  const [qualityReportError, setQualityReportError] = useState<string | null>(null);
   const [orderCompletionFilters, setOrderCompletionFilters] = useState<ProductionPlanFilters>({
     date: getTodayDateInputValue(),
     status: '',
@@ -179,6 +189,19 @@ export function QueryAnalysisPage() {
     }
   }
 
+  async function handleQualityReportSearch(nextFilters = qualityReportFilters) {
+    setQualityReportLoading(true);
+    setQualityReportError(null);
+
+    try {
+      setQualityReport(await fetchQualityDailyReport(nextFilters));
+    } catch {
+      setQualityReportError('质量日报查询失败，请检查筛选条件后重试');
+    } finally {
+      setQualityReportLoading(false);
+    }
+  }
+
   async function handleChangeLogSearch(nextFilters = changeLogFilters) {
     setChangeLogLoading(true);
     setChangeLogError(null);
@@ -238,6 +261,15 @@ export function QueryAnalysisPage() {
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === 'qualityReport'}
+          className={['master-tabs__button', activeTab === 'qualityReport' ? 'master-tabs__button--active' : ''].filter(Boolean).join(' ')}
+          onClick={() => setActiveTab('qualityReport')}
+        >
+          质量日报
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === 'details'}
           className={['master-tabs__button', activeTab === 'details' ? 'master-tabs__button--active' : ''].filter(Boolean).join(' ')}
           onClick={() => setActiveTab('details')}
@@ -275,6 +307,17 @@ export function QueryAnalysisPage() {
             setDashboardFilters(productionLineId ? { productionLineId } : {})
           }
           onExport={() => exportDashboard(dashboard)}
+        />
+      ) : activeTab === 'qualityReport' ? (
+        <QualityDailyReportTab
+          filters={qualityReportFilters}
+          report={qualityReport}
+          loading={qualityReportLoading}
+          error={qualityReportError}
+          productionLines={productionLines}
+          onFilterChange={setQualityReportFilters}
+          onSearch={handleQualityReportSearch}
+          onExport={() => exportQualityDailyReport(qualityReport, qualityReportFilters.productionLineId, productionLines)}
         />
       ) : activeTab === 'orderCompletion' ? (
         <OrderCompletionTab
@@ -514,6 +557,131 @@ function DashboardTab({
           empty={!dashboard?.unqualifiedPartDistribution.length}
           option={unqualifiedChartOption}
         />
+      </div>
+    </section>
+  );
+}
+
+function QualityDailyReportTab({
+  filters,
+  report,
+  loading,
+  error,
+  productionLines,
+  onFilterChange,
+  onSearch,
+  onExport
+}: {
+  filters: QualityDailyReportFilters;
+  report: QualityDailyReportResponse | null;
+  loading: boolean;
+  error: string | null;
+  productionLines: ProductionLineOption[];
+  onFilterChange: (filters: QualityDailyReportFilters) => void;
+  onSearch: () => void;
+  onExport: () => void;
+}) {
+  function updateFilter(key: keyof QualityDailyReportFilters, value: string) {
+    onFilterChange({
+      ...filters,
+      [key]: key === 'productionLineId' ? value : Number(value)
+    });
+  }
+
+  return (
+    <section className="query-section" aria-label="质量日报内容">
+      {error ? <Alert variant="error">{error}</Alert> : null}
+      <form
+        className="query-filter-grid"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onSearch();
+        }}
+      >
+        <TextInput
+          label="年份"
+          type="number"
+          min="2000"
+          max="2100"
+          value={String(filters.year ?? '')}
+          onChange={(event) => updateFilter('year', event.target.value)}
+        />
+        <Select label="月份" value={String(filters.month ?? '')} onChange={(event) => updateFilter('month', event.target.value)}>
+          {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+            <option key={month} value={month}>
+              {month}月
+            </option>
+          ))}
+        </Select>
+        <Select label="产线" value={filters.productionLineId ?? ''} onChange={(event) => updateFilter('productionLineId', event.target.value)}>
+          <option value="">全部产线</option>
+          {productionLines.map((line) => (
+            <option key={line.id} value={line.id}>
+              {line.code} {line.name}
+            </option>
+          ))}
+        </Select>
+        <div className="query-filter-actions">
+          <Button type="submit" loading={loading} loadingLabel="查询中...">
+            <Search size={16} strokeWidth={2} aria-hidden="true" />
+            查询日报
+          </Button>
+          <Button type="button" variant="secondary" disabled={!report} onClick={onExport}>
+            <Download size={16} strokeWidth={2} aria-hidden="true" />
+            导出 Excel
+          </Button>
+        </div>
+      </form>
+
+      <div className="quality-report-title" aria-label="质量日报标题">
+        <h2>生产质量日报表（一次下线合格率）</h2>
+        <span>{report ? `${report.period.year}年${report.period.month}月` : `${filters.year}年${filters.month}月`}</span>
+        <span>生产车间：缝纫</span>
+        <span>工序：缝纫</span>
+      </div>
+
+      <div className="master-table-wrap quality-report-table-wrap">
+        <table className="master-table quality-report-table" aria-label="生产质量日报">
+          <thead>
+            <tr>
+              {['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产数量', '合格品数量', '不合格数量', '合格率'].map((label) => (
+                <th key={label} rowSpan={2}>{label}</th>
+              ))}
+              <th colSpan={Math.max(report?.defectReasons.length ?? 0, 1)}>不合格统计</th>
+            </tr>
+            <tr>
+              {report?.defectReasons.length ? (
+                report.defectReasons.map((reason) => <th key={reason.id}>{reason.code} {reason.name}</th>)
+              ) : (
+                <th>缺陷原因</th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {report?.rows.length ? (
+              report.rows.map((row, index) => (
+                <tr key={`${row.businessDate}-${row.productionLineId}-${row.vehicleModel ?? ''}-${row.partName ?? ''}`}>
+                  <td>{index + 1}</td>
+                  <td>{report.period.month}月</td>
+                  <td>{row.businessDate}</td>
+                  <td>{row.productionLineName}</td>
+                  <td>{row.vehicleModel || '-'}</td>
+                  <td>{row.partName || '-'}</td>
+                  <td>{row.process}</td>
+                  <td>{row.productionQuantity}</td>
+                  <td>{row.qualifiedQuantity}</td>
+                  <td>{row.unqualifiedQuantity}</td>
+                  <td>{formatPercentage(row.qualifiedRate)}</td>
+                  {report.defectReasons.map((reason) => <td key={reason.id}>{row.defectCounts[reason.id] ?? 0}</td>)}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={12 + (report?.defectReasons.length ?? 0)}>请设置条件后查询质量日报</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -1158,6 +1326,15 @@ function formatCompletionRate(value: number): string {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+function formatPercentage(value: number): string {
+  return formatCompletionRate(value);
+}
+
+function getCurrentBeijingYearMonth(): { year: number; month: number } {
+  const [year, month] = getTodayDateInputValue().split('-').map(Number);
+  return { year: year || new Date().getFullYear(), month: month || new Date().getMonth() + 1 };
+}
+
 function getTodayDateInputValue(): string {
   const parts = new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -1248,6 +1425,54 @@ async function exportChangeLogs(logs: InspectionRecordChangeLog[]) {
       缺陷原因: log.defectReasons.map((reason) => `${reason.code} ${reason.name}`).join('、'),
       操作人: log.operator.username
     }))
+  });
+}
+
+async function exportQualityDailyReport(
+  report: QualityDailyReportResponse | null,
+  selectedProductionLineId: string | undefined,
+  productionLines: ProductionLineOption[]
+) {
+  if (!report) {
+    return;
+  }
+
+  const XLSX = await import('xlsx');
+  const fixedHeaders = ['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产数量', '合格品数量', '不合格数量', '合格率'];
+  const reasonHeaders = report.defectReasons.map((reason) => `${reason.code} ${reason.name}`);
+  const rows: Array<Array<string | number>> = [
+    ['生产质量日报表（一次下线合格率）'],
+    [`年：${report.period.year}`, `月：${report.period.month}`, '生产车间：缝纫', '工序：缝纫'],
+    [...fixedHeaders, '不合格统计'],
+    [...fixedHeaders.map(() => ''), ...reasonHeaders],
+    ...report.rows.map((row, index) => [
+      index + 1,
+      `${report.period.month}月`,
+      row.businessDate,
+      row.productionLineName,
+      row.vehicleModel ?? '',
+      row.partName ?? '',
+      row.process,
+      row.productionQuantity,
+      row.qualifiedQuantity,
+      row.unqualifiedQuantity,
+      formatPercentage(row.qualifiedRate),
+      ...report.defectReasons.map((reason) => row.defectCounts[reason.id] ?? 0)
+    ])
+  ];
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const totalColumns = fixedHeaders.length + Math.max(reasonHeaders.length, 1);
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: totalColumns - 1 } },
+    ...fixedHeaders.map((_, column) => ({ s: { r: 2, c: column }, e: { r: 3, c: column } })),
+    { s: { r: 2, c: fixedHeaders.length }, e: { r: 2, c: totalColumns - 1 } }
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, '生产质量日报');
+  const selectedLine = productionLines.find((line) => line.id === selectedProductionLineId);
+  const suffix = selectedLine ? `_${selectedLine.code}` : '';
+  XLSX.writeFile(workbook, `生产质量日报表_${report.period.year}-${String(report.period.month).padStart(2, '0')}${suffix}.xlsx`, {
+    bookType: 'xlsx'
   });
 }
 

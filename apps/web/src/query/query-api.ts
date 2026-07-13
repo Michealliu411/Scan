@@ -8,11 +8,19 @@ import {
   DetailRecord,
   DetailQueryFilters,
   DetailQueryResponse,
-  ProductionLineOption
+  ProductionLineOption,
+  QualityDailyReportFilters,
+  QualityDailyReportResponse
 } from './query-types';
 
 export function fetchDashboard(filters: DashboardFilters = {}): Promise<DashboardResponse> {
   return apiFetch<DashboardResponse>(`/analytics/dashboard${toQueryString(filters)}`);
+}
+
+export function fetchQualityDailyReport(
+  filters: QualityDailyReportFilters
+): Promise<QualityDailyReportResponse> {
+  return apiFetch<QualityDailyReportResponse>(`/analytics/quality-daily-report${toQueryString(filters)}`);
 }
 
 export function fetchDetailRecords(filters: DetailQueryFilters = {}): Promise<DetailQueryResponse> {

@@ -1277,6 +1277,44 @@ h1 {
   min-width: 1220px;
 }
 
+.quality-report-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
+.quality-report-title h2 {
+  width: 100%;
+  margin: 0;
+  font-size: 18px;
+}
+
+.quality-report-title span {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.quality-report-table {
+  min-width: 1520px;
+}
+
+.quality-report-table th,
+.quality-report-table td {
+  min-width: 72px;
+  padding: 10px 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.quality-report-table th:nth-child(5),
+.quality-report-table th:nth-child(6),
+.quality-report-table td:nth-child(5),
+.quality-report-table td:nth-child(6) {
+  min-width: 144px;
+  white-space: normal;
+}
+
 .reason-dialog {
   width: min(920px, calc(100vw - 32px));
   max-height: min(780px, calc(100vh - 32px));

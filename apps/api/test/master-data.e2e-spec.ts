@@ -50,6 +50,11 @@ describe('Master data API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: dailyPlanMigrationSql });
+    const qualityReportSnapshotMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260713150000_add_quality_report_snapshots/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: qualityReportSnapshotMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');

@@ -4,6 +4,7 @@ import { QueryAnalysisPage } from './QueryAnalysisPage';
 import { fetchDailyProductionPlans } from '../production-plan/production-plan-api';
 import {
   fetchDashboard,
+  fetchQualityDailyReport,
   fetchInspectionRecordChangeLogs,
   fetchDetailRecords,
   fetchQueryDefectReasons,
@@ -26,6 +27,7 @@ vi.mock('echarts', () => ({
 
 vi.mock('./query-api', () => ({
   fetchDashboard: vi.fn(),
+  fetchQualityDailyReport: vi.fn(),
   fetchInspectionRecordChangeLogs: vi.fn(),
   fetchDetailRecords: vi.fn(),
   fetchQueryDefectReasons: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock('../production-plan/production-plan-api', () => ({
 }));
 
 const fetchDashboardMock = vi.mocked(fetchDashboard);
+const fetchQualityDailyReportMock = vi.mocked(fetchQualityDailyReport);
 const fetchInspectionRecordChangeLogsMock = vi.mocked(fetchInspectionRecordChangeLogs);
 const fetchDetailRecordsMock = vi.mocked(fetchDetailRecords);
 const fetchQueryDefectReasonsMock = vi.mocked(fetchQueryDefectReasons);
@@ -88,6 +91,37 @@ describe('QueryAnalysisPage', () => {
         { partNumber: 'PN-B', total: 1 }
       ],
       unqualifiedPartDistribution: [{ partNumber: 'PN-A', unqualified: 1 }]
+    });
+    fetchQualityDailyReportMock.mockResolvedValue({
+      period: {
+        year: 2026,
+        month: 5,
+        startUtc: '2026-04-30T16:00:00.000Z',
+        endUtc: '2026-05-31T16:00:00.000Z'
+      },
+      workshop: '缝纫',
+      process: '缝纫',
+      defectReasons: [
+        { id: 'reason-a', code: 'A0', name: '错缝' },
+        { id: 'reason-b', code: 'A1', name: '漏缝' }
+      ],
+      rows: [
+        {
+          businessDate: '2026-05-10',
+          productionLineId: 'line-1',
+          productionLineCode: 'LINE-01',
+          productionLineName: '一号线',
+          vehicleModel: '车型-日报',
+          partName: '部件-日报',
+          workshop: '缝纫',
+          process: '缝纫',
+          productionQuantity: 10,
+          qualifiedQuantity: 8,
+          unqualifiedQuantity: 2,
+          qualifiedRate: 0.8,
+          defectCounts: { 'reason-a': 2, 'reason-b': 0 }
+        }
+      ]
     });
     fetchDetailRecordsMock.mockResolvedValue({
       page: 1,
@@ -238,6 +272,32 @@ describe('QueryAnalysisPage', () => {
     await waitFor(() => {
       expect(fetchDashboardMock).toHaveBeenLastCalledWith({ productionLineId: 'line-2' });
     });
+  });
+
+  it('queries and renders the quality daily report with dynamic defect columns', async () => {
+    render(<QueryAnalysisPage />);
+
+    fireEvent.click(await screen.findByRole('tab', { name: '质量日报' }));
+    fireEvent.change(screen.getByLabelText('年份'), { target: { value: '2026' } });
+    fireEvent.change(screen.getByLabelText('月份'), { target: { value: '5' } });
+    fireEvent.change(screen.getByLabelText('产线'), { target: { value: 'line-1' } });
+    fireEvent.click(screen.getByRole('button', { name: '查询日报' }));
+
+    await waitFor(() => {
+      expect(fetchQualityDailyReportMock).toHaveBeenLastCalledWith({
+        year: 2026,
+        month: 5,
+        productionLineId: 'line-1'
+      });
+    });
+
+    const table = await screen.findByRole('table', { name: '生产质量日报' });
+    expect(within(table).getByText('部件')).toBeTruthy();
+    expect(within(table).getByText('A0 错缝')).toBeTruthy();
+    expect(within(table).getByText('A1 漏缝')).toBeTruthy();
+    expect(within(table).getByText('部件-日报')).toBeTruthy();
+    expect(within(table).getByText('80%')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '导出 Excel' })).not.toHaveProperty('disabled', true);
   });
 
   it('opens the dashboard in a full-screen view and exits with Escape', async () => {

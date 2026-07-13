@@ -36,7 +36,8 @@ describe('Production plans API', () => {
       '20260525090000_add_operation_logs',
       '20260605093000_add_daily_production_plans',
       '20260608131500_add_daily_plan_production_line',
-      '20260608134500_allow_daily_plan_multi_line'
+      '20260608134500_allow_daily_plan_multi_line',
+      '20260713150000_add_quality_report_snapshots'
     ]) {
       const migrationSql = await readFile(
         join(__dirname, `../prisma/migrations/${migration}/migration.sql`),
