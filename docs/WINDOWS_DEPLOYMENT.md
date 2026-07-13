@@ -108,6 +108,7 @@ The deploy script:
 - builds API and web assets;
 - opens Windows firewall ports 3000 and 8080;
 - creates startup tasks `ScanApi` and `ScanWeb`;
+- creates the daily online database backup task `ScanDatabaseBackup`;
 - starts both tasks;
 - runs basic API and web health checks.
 
@@ -190,6 +191,38 @@ The update script also creates timestamped database backups under:
 ```text
 C:\scan\backups
 ```
+
+### 每日在线备份
+
+部署脚本还会创建 `ScanDatabaseBackup` 计划任务。它以 `SYSTEM` 身份每天本机时间 02:00 执行在线 SQLite 一致性备份，运行期间不会停止或重启 `ScanApi`、`ScanWeb`。
+
+每日备份位于：
+
+```text
+C:\backup
+```
+
+文件名为 `scan-db-yyyyMMdd-HHmmss.db`，默认保留 30 天。首次安装或更新时可调整保留时间，例如保留 60 天：
+
+```powershell
+.\scripts\deploy-windows.ps1 -Mode Update -ServerIp "192.168.1.144" -BackupRetentionDays 60
+```
+
+手工立即执行一次备份：
+
+```powershell
+Start-ScheduledTask ScanDatabaseBackup
+```
+
+检查任务状态和最近执行结果：
+
+```powershell
+Get-ScheduledTask ScanDatabaseBackup
+Get-ScheduledTaskInfo ScanDatabaseBackup
+Get-Content C:\scan\logs\database-backup.log -Tail 80
+```
+
+任务失败不会影响在线业务，也不会删除既有正式备份；请检查 `C:` 磁盘空间、`C:\backup` 权限和日志内容。
 
 ## 6. Optional Parameters
 

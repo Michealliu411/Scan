@@ -106,6 +106,13 @@ Offline server note:
 
 The deploy script stores data under C:\scan\data.
 Update mode backs up C:\scan\data\scan.db to C:\scan\backups before migration unless database steps are skipped.
+
+Daily online backup:
+- The deploy script registers ScanDatabaseBackup to run every day at 02:00 as SYSTEM.
+- It creates a consistent SQLite backup without stopping ScanApi or ScanWeb.
+- Backup files are stored in C:\backup and the latest 30 days are retained by default.
+- Run once now: Start-ScheduledTask ScanDatabaseBackup
+- View the result: Get-Content C:\scan\logs\database-backup.log -Tail 80
 README
 
 (cd "$STAGING_DIR" && zip -qr "$PACKAGE_PATH" Scan ScanData README-WINDOWS.txt)

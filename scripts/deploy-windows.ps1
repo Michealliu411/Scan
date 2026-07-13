@@ -9,6 +9,8 @@ param(
   [string]$ApiBaseUrl = "",
   [string]$ScanLookupUrl = "",
   [string]$CookieSecret = "",
+  [ValidateRange(1, 3650)]
+  [int]$BackupRetentionDays = 30,
   [switch]$FreshDatabase,
   [switch]$SkipInstall,
   [switch]$SkipDatabase,
@@ -269,6 +271,93 @@ http.createServer((request, response) => {
   }
 }
 
+function Write-DatabaseBackupScript {
+  param(
+    [string]$InstallRoot,
+    [string]$ProjectRoot,
+    [string]$EnvPath,
+    [string]$LogsDir,
+    [string]$BackupRoot,
+    [int]$RetentionDays
+  )
+
+  $backupScriptPath = Join-Path $InstallRoot "run-database-backup.ps1"
+  $backupLogPath = Join-Path $LogsDir "database-backup.log"
+
+  $backupScript = @"
+`$ErrorActionPreference = "Stop"
+`$projectRoot = "$ProjectRoot"
+`$envPath = "$EnvPath"
+`$backupRoot = "$BackupRoot"
+`$backupLogPath = "$backupLogPath"
+`$retentionDays = $RetentionDays
+
+function Write-BackupLog {
+  param([string]`$Message)
+
+  `$timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+  Add-Content -Path `$backupLogPath -Value "[`$timestamp] `$Message" -Encoding UTF8
+}
+
+`$partialPath = `$null
+try {
+  New-Item -ItemType Directory -Force -Path `$backupRoot | Out-Null
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent `$backupLogPath) | Out-Null
+
+  if (-not (Test-Path `$envPath)) {
+    throw "Environment file is missing: `$envPath"
+  }
+
+  `$databaseUrlLine = Get-Content -Path `$envPath |
+    Where-Object { `$_ -match '^DATABASE_URL=' } |
+    Select-Object -First 1
+  if (-not `$databaseUrlLine) {
+    throw "DATABASE_URL is missing from `$envPath"
+  }
+
+  `$env:DATABASE_URL = (`$databaseUrlLine -replace '^DATABASE_URL=', '').Trim('"')
+  if (-not `$env:DATABASE_URL.StartsWith('file:')) {
+    throw "DATABASE_URL must use SQLite file URL"
+  }
+
+  `$stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  `$backupPath = Join-Path `$backupRoot ("scan-db-`$stamp.db")
+  `$partialPath = "`$backupPath.partial"
+  `$sqlBackupPath = `$partialPath.Replace('\', '/').Replace("'", "''")
+  `$sql = "VACUUM INTO '`$sqlBackupPath';"
+
+  Set-Location `$projectRoot
+  `$sql | & pnpm --filter "@scan/api" exec prisma db execute --stdin --url `$env:DATABASE_URL
+  if (`$LASTEXITCODE -ne 0) {
+    throw "Prisma online backup command failed with exit code `$LASTEXITCODE"
+  }
+
+  if (-not (Test-Path `$partialPath) -or (Get-Item `$partialPath).Length -le 0) {
+    throw "Online backup output is missing or empty: `$partialPath"
+  }
+
+  Move-Item -Path `$partialPath -Destination `$backupPath -Force
+  `$partialPath = `$null
+
+  Get-ChildItem -Path `$backupRoot -Filter "scan-db-*.db" -File |
+    Where-Object { `$_.LastWriteTime -lt (Get-Date).AddDays(-`$retentionDays) } |
+    Remove-Item -Force
+
+  Write-BackupLog "SUCCESS `$backupPath"
+} catch {
+  if (`$partialPath -and (Test-Path `$partialPath)) {
+    Remove-Item -Path `$partialPath -Force -ErrorAction SilentlyContinue
+  }
+
+  Write-BackupLog "FAILED `$(`$_.Exception.Message)"
+  exit 1
+}
+"@
+
+  Set-Content -Path $backupScriptPath -Value $backupScript -Encoding UTF8
+  return $backupScriptPath
+}
+
 function Register-ScanTask {
   param(
     [string]$TaskName,
@@ -283,6 +372,23 @@ function Register-ScanTask {
 
   Register-ScheduledTask `
     -TaskName $TaskName `
+    -Action $action `
+    -Trigger $trigger `
+    -Principal $principal `
+    -Force | Out-Null
+}
+
+function Register-DatabaseBackupTask {
+  param([string]$ScriptPath)
+
+  $action = New-ScheduledTaskAction `
+    -Execute "powershell.exe" `
+    -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
+  $trigger = New-ScheduledTaskTrigger -Daily -At "02:00"
+  $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+
+  Register-ScheduledTask `
+    -TaskName "ScanDatabaseBackup" `
     -Action $action `
     -Trigger $trigger `
     -Principal $principal `
@@ -344,6 +450,7 @@ $InstallRoot = [System.IO.Path]::GetFullPath($InstallRoot)
 $DataDir = Join-Path $InstallRoot "data"
 $LogsDir = Join-Path $InstallRoot "logs"
 $BackupsDir = Join-Path $InstallRoot "backups"
+$BackupRoot = "C:\backup"
 $DatabasePath = Join-Path $DataDir "scan.db"
 $EnvPath = Join-Path $ProjectRoot ".env"
 $ApiEnvPath = Join-Path $ProjectRoot "apps\api\.env"
@@ -508,11 +615,19 @@ if (-not $SkipFirewall) {
 
 Write-Step "Writing run scripts"
 $runnerScripts = Write-RunnerScripts $InstallRoot $ProjectRoot $LogsDir $WebPort
+$databaseBackupScriptPath = Write-DatabaseBackupScript `
+  $InstallRoot `
+  $ProjectRoot `
+  $EnvPath `
+  $LogsDir `
+  $BackupRoot `
+  $BackupRetentionDays
 
 if (-not $SkipTasks) {
   Write-Step "Registering startup tasks"
   Register-ScanTask "ScanApi" $runnerScripts.ApiRunner
   Register-ScanTask "ScanWeb" $runnerScripts.WebRunner
+  Register-DatabaseBackupTask $databaseBackupScriptPath
 
   Write-Step "Starting app tasks"
   Restart-ScanTask "ScanApi"
@@ -530,6 +645,7 @@ Write-Host "Open: $WebOrigin" -ForegroundColor Green
 Write-Host "API:  $ApiBaseUrl"
 Write-Host "Data: $DatabasePath"
 Write-Host "Logs: $LogsDir"
+Write-Host "Daily database backup: $BackupRoot (02:00, keep $BackupRetentionDays days)"
 Write-Host ""
 Write-Host "Useful commands:"
 Write-Host "  Start-ScheduledTask ScanApi"
@@ -538,3 +654,5 @@ Write-Host "  Start-ScheduledTask ScanWeb"
 Write-Host "  Stop-ScheduledTask ScanWeb"
 Write-Host "  Get-Content $LogsDir\api.log -Tail 80"
 Write-Host "  Get-Content $LogsDir\web.log -Tail 80"
+Write-Host "  Start-ScheduledTask ScanDatabaseBackup"
+Write-Host "  Get-Content $LogsDir\database-backup.log -Tail 80"
