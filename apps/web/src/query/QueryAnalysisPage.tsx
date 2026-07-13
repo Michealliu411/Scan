@@ -677,7 +677,9 @@ function QualityDailyReportTab({
               ))
             ) : (
               <tr>
-                <td colSpan={12 + (report?.defectReasons.length ?? 0)}>请设置条件后查询质量日报</td>
+                <td colSpan={12 + (report?.defectReasons.length ?? 0)}>
+                  {report ? '所选条件下暂无质量日报数据' : '请设置条件后查询质量日报'}
+                </td>
               </tr>
             )}
           </tbody>
