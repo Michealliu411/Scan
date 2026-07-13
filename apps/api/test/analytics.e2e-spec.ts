@@ -52,6 +52,11 @@ describe('Analytics API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: dailyPlanMigrationSql });
+    const qualityReportSnapshotMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260713150000_add_quality_report_snapshots/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: qualityReportSnapshotMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -196,6 +201,8 @@ describe('Analytics API', () => {
     productionLineId: string;
     result: InspectionResult;
     scannedAt: Date;
+    vehicleModel?: string | null;
+    partName?: string | null;
     defectReasonIds?: string[];
   }) {
     const record = await prisma.inspectionRecord.create({
@@ -203,7 +210,8 @@ describe('Analytics API', () => {
         barcode: data.barcode,
         qualifiedBarcodeKey: data.qualifiedBarcodeKey ?? null,
         partNumber: data.partNumber,
-        vehicleModel: `车型-${data.partNumber}`,
+        vehicleModel: data.vehicleModel === undefined ? `车型-${data.partNumber}` : data.vehicleModel,
+        partName: data.partName ?? null,
         productionLineId: data.productionLineId,
         inspectorId,
         result: data.result,
@@ -294,5 +302,111 @@ describe('Analytics API', () => {
     const response = await inspector.get('/analytics/dashboard?year=2026&month=5').expect(403);
 
     expect(response.body.code).toBe('ROLE_FORBIDDEN');
+  });
+
+  it('returns the monthly quality daily report from each barcode global first inspection only', async () => {
+    const inactiveReason = await prisma.defectReason.create({
+      data: { code: 'A-INACTIVE', name: '历史原因', isActive: false }
+    });
+    await seedRecord({
+      barcode: 'FIRST-MAY-UNQUALIFIED',
+      partNumber: 'PN-QUALITY-A',
+      vehicleModel: '车型-质量',
+      partName: '部件-质量',
+      productionLineId: lineOneId,
+      result: InspectionResult.UNQUALIFIED,
+      scannedAt: new Date('2026-05-10T01:00:00.000Z'),
+      defectReasonIds: [defectReasonId]
+    });
+    await seedRecord({
+      barcode: 'FIRST-MAY-UNQUALIFIED',
+      qualifiedBarcodeKey: 'FIRST-MAY-UNQUALIFIED',
+      partNumber: 'PN-QUALITY-A',
+      vehicleModel: '车型-质量',
+      partName: '部件-质量',
+      productionLineId: lineOneId,
+      result: InspectionResult.QUALIFIED,
+      scannedAt: new Date('2026-06-02T01:00:00.000Z')
+    });
+    await seedRecord({
+      barcode: 'FIRST-MAY-QUALIFIED',
+      qualifiedBarcodeKey: 'FIRST-MAY-QUALIFIED',
+      partNumber: 'PN-QUALITY-A',
+      vehicleModel: '车型-质量',
+      partName: '部件-质量',
+      productionLineId: lineOneId,
+      result: InspectionResult.QUALIFIED,
+      scannedAt: new Date('2026-05-10T02:00:00.000Z')
+    });
+    await seedRecord({
+      barcode: 'FIRST-MAY-INACTIVE-REASON',
+      partNumber: 'PN-QUALITY-B',
+      vehicleModel: null,
+      partName: null,
+      productionLineId: lineTwoId,
+      result: InspectionResult.UNQUALIFIED,
+      scannedAt: new Date('2026-05-11T01:00:00.000Z'),
+      defectReasonIds: [inactiveReason.id]
+    });
+
+    const query = await login('query');
+    const mayResponse = await query.get('/analytics/quality-daily-report?year=2026&month=5').expect(200);
+
+    expect(mayResponse.body).toMatchObject({
+      period: { year: 2026, month: 5 },
+      workshop: '缝纫',
+      process: '缝纫'
+    });
+    expect(mayResponse.body.defectReasons).toEqual([
+      expect.objectContaining({ id: inactiveReason.id, code: 'A-INACTIVE', name: '历史原因' }),
+      expect.objectContaining({ id: defectReasonId, code: 'SCRATCH', name: '划伤' })
+    ]);
+    expect(mayResponse.body.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          businessDate: '2026-05-10',
+          productionLineId: lineOneId,
+          vehicleModel: '车型-质量',
+          partName: '部件-质量',
+          productionQuantity: 2,
+          qualifiedQuantity: 1,
+          unqualifiedQuantity: 1,
+          qualifiedRate: 0.5,
+          defectCounts: expect.objectContaining({ [defectReasonId]: 1, [inactiveReason.id]: 0 })
+        }),
+        expect.objectContaining({
+          businessDate: '2026-05-11',
+          productionLineId: lineTwoId,
+          vehicleModel: null,
+          partName: null,
+          productionQuantity: 1,
+          qualifiedQuantity: 0,
+          unqualifiedQuantity: 1,
+          qualifiedRate: 0,
+          defectCounts: expect.objectContaining({ [inactiveReason.id]: 1, [defectReasonId]: 0 })
+        })
+      ])
+    );
+
+    const juneResponse = await query.get('/analytics/quality-daily-report?year=2026&month=6').expect(200);
+    expect(
+      juneResponse.body.rows.some(
+        (row: { vehicleModel: string | null; partName: string | null }) =>
+          row.vehicleModel === '车型-质量' && row.partName === '部件-质量'
+      )
+    ).toBe(false);
+
+    const lineOneResponse = await query
+      .get(`/analytics/quality-daily-report?year=2026&month=5&productionLineId=${lineOneId}`)
+      .expect(200);
+    expect(lineOneResponse.body.rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ productionLineId: lineOneId })])
+    );
+    expect(lineOneResponse.body.rows).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ productionLineId: lineTwoId })])
+    );
+
+    const inspector = await login('inspector');
+    await inspector.get('/analytics/quality-daily-report?year=2026&month=5').expect(403);
   });
 });

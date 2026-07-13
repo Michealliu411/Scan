@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InspectionResult } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { getBeijingMonthRange, getCurrentBeijingYearMonth } from '../time/beijing-time';
+import { getBeijingMonthRange, getCurrentBeijingYearMonth, toBeijingDateString } from '../time/beijing-time';
 
 type DashboardQuery = {
   year?: string;
@@ -81,6 +81,132 @@ export class AnalyticsService {
         records.filter((record) => record.result === InspectionResult.UNQUALIFIED),
         'unqualified'
       )
+    };
+  }
+
+  async getQualityDailyReport(query: DashboardQuery) {
+    const { year, month } = this.resolvePeriod(query);
+    const { startUtc, endUtc } = getBeijingMonthRange(year, month);
+    const productionLineId = query.productionLineId?.trim() || undefined;
+
+    if (productionLineId) {
+      await this.assertProductionLineExists(productionLineId);
+    }
+
+    const [defectReasons, records] = await Promise.all([
+      this.prisma.defectReason.findMany({
+        orderBy: [{ code: 'asc' }, { name: 'asc' }],
+        select: { id: true, code: true, name: true }
+      }),
+      this.prisma.inspectionRecord.findMany({
+        include: {
+          productionLine: {
+            select: { id: true, code: true, name: true, sortOrder: true }
+          },
+          defectReasonLinks: {
+            select: { defectReasonId: true }
+          }
+        },
+        orderBy: [{ scannedAt: 'asc' }, { id: 'asc' }]
+      })
+    ]);
+
+    const firstRecordsByBarcode = new Map<string, (typeof records)[number]>();
+    for (const record of records) {
+      if (!firstRecordsByBarcode.has(record.barcode)) {
+        firstRecordsByBarcode.set(record.barcode, record);
+      }
+    }
+
+    const initialDefectCounts = () => Object.fromEntries(defectReasons.map((reason) => [reason.id, 0]));
+    const rowsByKey = new Map<
+      string,
+      {
+        businessDate: string;
+        productionLineId: string;
+        productionLineCode: string;
+        productionLineName: string;
+        productionLineSortOrder: number;
+        vehicleModel: string | null;
+        partName: string | null;
+        workshop: '缝纫';
+        process: '缝纫';
+        productionQuantity: number;
+        qualifiedQuantity: number;
+        unqualifiedQuantity: number;
+        defectCounts: Record<string, number>;
+      }
+    >();
+
+    for (const record of firstRecordsByBarcode.values()) {
+      if (
+        record.scannedAt < startUtc ||
+        record.scannedAt >= endUtc ||
+        (productionLineId && record.productionLineId !== productionLineId)
+      ) {
+        continue;
+      }
+
+      const businessDate = toBeijingDateString(record.scannedAt);
+      const key = JSON.stringify([
+        businessDate,
+        record.productionLineId,
+        record.vehicleModel,
+        record.partName
+      ]);
+      let row = rowsByKey.get(key);
+
+      if (!row) {
+        row = {
+          businessDate,
+          productionLineId: record.productionLine.id,
+          productionLineCode: record.productionLine.code,
+          productionLineName: record.productionLine.name,
+          productionLineSortOrder: record.productionLine.sortOrder,
+          vehicleModel: record.vehicleModel,
+          partName: record.partName,
+          workshop: '缝纫',
+          process: '缝纫',
+          productionQuantity: 0,
+          qualifiedQuantity: 0,
+          unqualifiedQuantity: 0,
+          defectCounts: initialDefectCounts()
+        };
+        rowsByKey.set(key, row);
+      }
+
+      row.productionQuantity += 1;
+      if (record.result === InspectionResult.QUALIFIED) {
+        row.qualifiedQuantity += 1;
+      } else {
+        row.unqualifiedQuantity += 1;
+        for (const link of record.defectReasonLinks) {
+          const currentCount = row.defectCounts[link.defectReasonId];
+          if (currentCount !== undefined) {
+            row.defectCounts[link.defectReasonId] = currentCount + 1;
+          }
+        }
+      }
+    }
+
+    return {
+      period: { year, month, startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString() },
+      workshop: '缝纫',
+      process: '缝纫',
+      defectReasons,
+      rows: [...rowsByKey.values()]
+        .sort(
+          (left, right) =>
+            left.businessDate.localeCompare(right.businessDate) ||
+            left.productionLineSortOrder - right.productionLineSortOrder ||
+            left.productionLineCode.localeCompare(right.productionLineCode) ||
+            (left.vehicleModel ?? '').localeCompare(right.vehicleModel ?? '') ||
+            (left.partName ?? '').localeCompare(right.partName ?? '')
+        )
+        .map(({ productionLineSortOrder: _sortOrder, ...row }) => ({
+          ...row,
+          qualifiedRate: row.productionQuantity ? row.qualifiedQuantity / row.productionQuantity : 0
+        }))
     };
   }
 

@@ -22,4 +22,17 @@ export class AnalyticsController {
   ) {
     return this.analytics.getDashboard(query);
   }
+
+  @Get('quality-daily-report')
+  @Roles(Role.QUERY, Role.ADMIN)
+  qualityDailyReport(
+    @Query()
+    query: {
+      year?: string;
+      month?: string;
+      productionLineId?: string;
+    }
+  ) {
+    return this.analytics.getQualityDailyReport(query);
+  }
 }
