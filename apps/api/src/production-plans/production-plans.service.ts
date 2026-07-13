@@ -419,7 +419,7 @@ export class ProductionPlansService {
       barcode: result.barcode,
       productionOrderNo,
       partNumber: result.partNumber,
-      productName: result.vehicleModel,
+      productName: result.productName ?? '',
       orderQuantity
     };
   }
