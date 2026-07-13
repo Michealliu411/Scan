@@ -11,3 +11,4 @@ releases/
 *.db
 *.db-journal
 .DS_Store
+.superpowers/
