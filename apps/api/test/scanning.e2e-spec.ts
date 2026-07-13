@@ -68,6 +68,11 @@ describe('Scanning API', () => {
       'utf8'
     );
     execFileSync('sqlite3', [dbPath], { input: dailyPlanMultiLineMigrationSql });
+    const qualityReportSnapshotMigrationSql = await readFile(
+      join(__dirname, '../prisma/migrations/20260713150000_add_quality_report_snapshots/migration.sql'),
+      'utf8'
+    );
+    execFileSync('sqlite3', [dbPath], { input: qualityReportSnapshotMigrationSql });
 
     const { Test } = await import('@nestjs/testing');
     const { AppModule } = await import('../src/app.module');
@@ -222,7 +227,9 @@ describe('Scanning API', () => {
         Message: '查询成功！',
         JsonData: {
           成品零件编号: '88460CC280',
-          成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH"
+          成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+          成品车型: 'KIA UXC',
+          成品品名: '乘客靠背座套'
         }
       })
     );
@@ -236,7 +243,9 @@ describe('Scanning API', () => {
     expect(response.body).toMatchObject({
       barcode: 'shui-xi-001',
       partNumber: '88460CC280',
-      vehicleModel: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      productName: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      vehicleModel: 'KIA UXC',
+      partName: '乘客靠背座套',
       source: 'PRODUCTION_ORDER_LOOKUP'
     });
   });
@@ -270,7 +279,9 @@ describe('Scanning API', () => {
         barcode: 'QUAL-000001',
         productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-000001',
+        productName: '原始产品名称-QUAL',
         vehicleModel: '车型-QUAL',
+        partName: '部件-QUAL',
         result: InspectionResult.QUALIFIED
       })
       .expect(201);
@@ -288,6 +299,9 @@ describe('Scanning API', () => {
     expect(record.dailyProductionPlanId).toBe(defaultPlanId);
     expect(record.inspector.username).toBe('inspector');
     expect(record.productionLine.id).toBe(productionLineId);
+    expect(record.productName).toBe('原始产品名称-QUAL');
+    expect(record.vehicleModel).toBe('车型-QUAL');
+    expect(record.partName).toBe('部件-QUAL');
   });
 
   it('blocks duplicate qualified submissions with existing record details for BARC-01', async () => {
@@ -759,7 +773,9 @@ describe('Scanning API', () => {
       kind: 'RESOLVED_PART',
       barcode: '33333333-3333-4333-8333-333333333333',
       partNumber: 'PN-NO-BARCODE',
+      productName: null,
       vehicleModel: '车型-无条码',
+      partName: null,
       source: 'NO_BARCODE_PRODUCT'
     });
   });

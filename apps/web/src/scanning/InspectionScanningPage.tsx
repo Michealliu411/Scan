@@ -206,7 +206,9 @@ export function InspectionScanningPage() {
       const part = {
         barcode: result.barcode,
         partNumber: result.partNumber,
+        productName: result.productName,
         vehicleModel: result.vehicleModel,
+        partName: result.partName,
         productionOrderNo: result.productionOrderNo,
         orderQuantity: result.orderQuantity,
         dailyPlan: result.dailyPlan
@@ -276,7 +278,9 @@ export function InspectionScanningPage() {
         barcode: part.barcode,
         productionOrderNo: part.productionOrderNo,
         partNumber: part.partNumber,
-        vehicleModel: part.vehicleModel,
+        productName: part.productName ?? undefined,
+        vehicleModel: part.vehicleModel ?? undefined,
+        partName: part.partName ?? undefined,
         result,
         ...(result === 'UNQUALIFIED'
           ? { defectReasonIds: selectedDefectReasonIds, operatorProfileId: selectedOperator?.id }

@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { ScanLookupGateway, ScanLookupResult } from './scan-lookup.gateway';
 
 const defaultLookupUrl =
-  'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
+  'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
 
 type ProductionOrderLookupResponse = {
   ErrCode?: number;
@@ -19,6 +19,8 @@ type ProductionOrderLookupResponse = {
 type ProductionOrderLookupData = {
   成品零件编号?: unknown;
   成品产品名称?: unknown;
+  成品车型?: unknown;
+  成品品名?: unknown;
   生产订单号?: unknown;
   生产订单编号?: unknown;
   生产订单?: unknown;
@@ -60,6 +62,8 @@ export class ProductionOrderScanLookupService implements ScanLookupGateway {
     };
     const partNumber = this.readString(lookupData, '成品零件编号');
     const productName = this.readString(lookupData, '成品产品名称');
+    const vehicleModel = this.readString(lookupData, '成品车型');
+    const partName = this.readString(lookupData, '成品品名');
     const productionOrderNo = this.readFirstString(lookupData, [
       '生产订单号',
       '生产订单编号',
@@ -74,17 +78,19 @@ export class ProductionOrderScanLookupService implements ScanLookupGateway {
       '数量'
     ]);
 
-    if (!partNumber || !productName) {
+    if (!partNumber) {
       throw new BadGatewayException({
         code: 'SCAN_LOOKUP_INVALID_RESPONSE',
-        message: '扫码接口返回数据缺少零件号或产品名称'
+        message: '扫码接口返回数据缺少零件号'
       });
     }
 
     return {
       barcode: trimmedBarcode,
       partNumber,
-      vehicleModel: productName,
+      productName,
+      vehicleModel,
+      partName,
       ...(productionOrderNo ? { productionOrderNo } : {}),
       ...(orderQuantity ? { orderQuantity } : {}),
       rawData: lookupData,

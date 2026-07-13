@@ -3,7 +3,9 @@ export const SCAN_LOOKUP_GATEWAY = 'SCAN_LOOKUP_GATEWAY';
 export type ScanLookupResult = {
   barcode: string;
   partNumber: string;
-  vehicleModel: string;
+  productName: string | null;
+  vehicleModel: string | null;
+  partName: string | null;
   productionOrderNo?: string;
   orderQuantity?: number;
   rawData?: unknown;

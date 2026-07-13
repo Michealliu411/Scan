@@ -26,7 +26,9 @@ export class SimulatedScanLookupService implements ScanLookupGateway {
     return {
       barcode: trimmedBarcode,
       partNumber: `PN-${padded.slice(-6)}`,
-      vehicleModel: `车型-${padded.slice(0, 4)}`
+      productName: null,
+      vehicleModel: `车型-${padded.slice(0, 4)}`,
+      partName: null
     };
   }
 }

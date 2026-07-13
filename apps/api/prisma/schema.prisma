@@ -130,7 +130,9 @@ model InspectionRecord {
   barcode             String
   qualifiedBarcodeKey String?                        @unique
   partNumber          String
+  productName         String?
   vehicleModel        String?
+  partName            String?
   productionOrderNo   String?
   dailyProductionPlanId String?
   productionLineId    String

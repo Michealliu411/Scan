@@ -12,7 +12,15 @@ export class CreateInspectionRecordDto {
 
   @IsString()
   @IsOptional()
+  productName?: string;
+
+  @IsString()
+  @IsOptional()
   vehicleModel?: string;
+
+  @IsString()
+  @IsOptional()
+  partName?: string;
 
   @IsString()
   @IsOptional()

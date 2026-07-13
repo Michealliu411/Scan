@@ -34,7 +34,9 @@ describe('InspectionScanningPage', () => {
       kind: 'RESOLVED_PART',
       barcode: 'ABC123456',
       partNumber: 'PN-123456',
+      productName: '原始产品名称-ABC1',
       vehicleModel: '车型-ABC1',
+      partName: '部件-ABC1',
       productionOrderNo: 'PO-SCAN',
       orderQuantity: 100,
       dailyPlan: {
@@ -74,7 +76,9 @@ describe('InspectionScanningPage', () => {
         barcode: 'ABC123456',
         productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-123456',
+        productName: '原始产品名称-ABC1',
         vehicleModel: '车型-ABC1',
+        partName: '部件-ABC1',
         result: 'QUALIFIED'
       });
     });
@@ -167,7 +171,9 @@ describe('InspectionScanningPage', () => {
         barcode: 'ABC123456',
         productionOrderNo: 'PO-SCAN',
         partNumber: 'PN-123456',
+        productName: '原始产品名称-ABC1',
         vehicleModel: '车型-ABC1',
+        partName: '部件-ABC1',
         result: 'UNQUALIFIED',
         defectReasonIds: ['reason-1', 'reason-2']
       });

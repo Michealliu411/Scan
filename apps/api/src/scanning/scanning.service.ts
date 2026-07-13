@@ -52,7 +52,9 @@ export class ScanningService {
       const record = await this.createUnqualifiedRecord(auth, {
         barcode: trimmedBarcode,
         partNumber: 'DIRTY-BARCODE',
+        productName: null,
         vehicleModel: null,
+        partName: null,
         productionOrderNo: null,
         dailyPlan: null,
         defectReasonIds: [specialBarcode.defectReasonId],
@@ -77,7 +79,9 @@ export class ScanningService {
         kind: 'RESOLVED_PART',
         barcode: trimmedBarcode,
         partNumber: specialBarcode.partNumber,
+        productName: null,
         vehicleModel: specialBarcode.vehicleModel,
+        partName: null,
         source: 'NO_BARCODE_PRODUCT'
       };
     }
@@ -157,7 +161,9 @@ export class ScanningService {
   async createRecord(auth: ActiveSessionContext, dto: CreateInspectionRecordDto) {
     const barcode = dto.barcode.trim();
     const partNumber = dto.partNumber.trim();
+    const productName = dto.productName?.trim() || null;
     const vehicleModel = dto.vehicleModel?.trim() || null;
+    const partName = dto.partName?.trim() || null;
     const operatorProfileId = dto.operatorProfileId?.trim() || null;
     const productionOrderNo = dto.productionOrderNo?.trim() || null;
 
@@ -206,7 +212,9 @@ export class ScanningService {
       return this.createQualifiedRecord(auth, {
         barcode,
         partNumber,
+        productName,
         vehicleModel,
+        partName,
         operatorProfileId,
         productionOrderNo,
         dailyPlan,
@@ -217,7 +225,9 @@ export class ScanningService {
     return this.createUnqualifiedRecord(auth, {
       barcode,
       partNumber,
+      productName,
       vehicleModel,
+      partName,
       operatorProfileId,
       productionOrderNo,
       dailyPlan,
@@ -231,7 +241,9 @@ export class ScanningService {
     data: {
       barcode: string;
       partNumber: string;
+      productName: string | null;
       vehicleModel: string | null;
+      partName: string | null;
       operatorProfileId: string | null;
       productionOrderNo: string | null;
       dailyPlan: ActivePlan | null;
@@ -251,7 +263,9 @@ export class ScanningService {
           barcode: data.barcode,
           qualifiedBarcodeKey: data.allowRepeat ? null : data.barcode,
           partNumber: data.partNumber,
+          productName: data.productName,
           vehicleModel: data.vehicleModel,
+          partName: data.partName,
           productionOrderNo: data.productionOrderNo,
           dailyProductionPlanId: data.dailyPlan?.id ?? null,
           productionLineId: auth.productionLine.id,
@@ -282,7 +296,9 @@ export class ScanningService {
     data: {
       barcode: string;
       partNumber: string;
+      productName: string | null;
       vehicleModel: string | null;
+      partName: string | null;
       operatorProfileId?: string | null;
       productionOrderNo: string | null;
       dailyPlan: ActivePlan | null;
@@ -331,7 +347,9 @@ export class ScanningService {
           barcode: data.barcode,
           qualifiedBarcodeKey: null,
           partNumber: data.partNumber,
+          productName: data.productName,
           vehicleModel: data.vehicleModel,
+          partName: data.partName,
           productionOrderNo: data.productionOrderNo,
           dailyProductionPlanId: data.dailyPlan?.id ?? null,
           productionLineId: auth.productionLine.id,
@@ -397,7 +415,9 @@ export class ScanningService {
       id: record.id,
       barcode: record.barcode,
       partNumber: record.partNumber,
+      productName: record.productName,
       vehicleModel: record.vehicleModel,
+      partName: record.partName,
       productionOrderNo: record.productionOrderNo,
       dailyProductionPlanId: record.dailyProductionPlanId,
       result: record.result,

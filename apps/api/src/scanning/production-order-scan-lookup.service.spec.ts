@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ProductionOrderScanLookupService } from './production-order-scan-lookup.service';
 
 describe('ProductionOrderScanLookupService', () => {
-  const lookupUrl = 'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
+  const lookupUrl = 'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
   let fetchMock: jest.Mock;
 
   beforeEach(() => {
@@ -24,6 +24,8 @@ describe('ProductionOrderScanLookupService', () => {
           生产订单号: 'PO-20260605-001',
           成品零件编号: '88460CC280',
           成品产品名称: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+          成品车型: 'KIA UXC',
+          成品品名: '乘客靠背座套',
           订单数量: '320'
         }
       })
@@ -37,7 +39,9 @@ describe('ProductionOrderScanLookupService', () => {
     expect(result).toMatchObject({
       barcode: 'SHUIXI-001',
       partNumber: '88460CC280',
-      vehicleModel: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      productName: "KIA PVC款乘客靠背UXC COVER'G ASSY-FR SEAT BACK,RH",
+      vehicleModel: 'KIA UXC',
+      partName: '乘客靠背座套',
       productionOrderNo: 'PO-20260605-001',
       orderQuantity: 320,
       source: 'PRODUCTION_ORDER_LOOKUP'
@@ -70,6 +74,8 @@ describe('ProductionOrderScanLookupService', () => {
         成品零件ID: 618255,
         成品零件编号: '3GB881405KNUB',
         成品产品名称: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+        成品车型: 'Passat B8',
+        成品品名: '驾驶座面套',
         JsonData: {
           id: 2850338,
           生产订单ID: 16444,
@@ -78,6 +84,8 @@ describe('ProductionOrderScanLookupService', () => {
           生产订单单据日期: '2026-06-06T00:00:00',
           成品零件编号: '3GB881405KNUB',
           成品产品名称: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+          成品车型: 'Passat B8',
+          成品品名: '驾驶座面套',
           生产订单数量: 280,
           成品零件ID: 618255
         }
@@ -92,7 +100,9 @@ describe('ProductionOrderScanLookupService', () => {
     expect(result).toMatchObject({
       barcode: '3GB881405KNUB 02ST660SKDC17',
       partNumber: '3GB881405KNUB',
-      vehicleModel: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+      productName: 'Passat B8 WL-Trendline配置驾驶座面套(基本型)',
+      vehicleModel: 'Passat B8',
+      partName: '驾驶座面套',
       productionOrderNo: 'MO202606050008',
       orderQuantity: 280,
       source: 'PRODUCTION_ORDER_LOOKUP'
@@ -125,9 +135,30 @@ describe('ProductionOrderScanLookupService', () => {
     await service.lookup('CODE-001');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai',
+      'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai',
       expect.any(Object)
     );
+  });
+
+  it('keeps vehicle model and part name empty when the successful interface response does not provide them', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        ErrCode: 200,
+        JsonData: {
+          成品零件编号: 'PN-EMPTY-METADATA',
+          成品产品名称: '仅原始产品名称'
+        }
+      })
+    );
+    const service = new ProductionOrderScanLookupService(configService({ SCAN_LOOKUP_URL: lookupUrl }));
+
+    await expect(service.lookup('CODE-EMPTY-METADATA')).resolves.toMatchObject({
+      barcode: 'CODE-EMPTY-METADATA',
+      partNumber: 'PN-EMPTY-METADATA',
+      productName: '仅原始产品名称',
+      vehicleModel: null,
+      partName: null
+    });
   });
 
   it('returns the normal not-found scan error when the external API does not return success', async () => {

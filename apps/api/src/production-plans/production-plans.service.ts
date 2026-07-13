@@ -50,7 +50,7 @@ export class ProductionPlansService {
         productionOrderNo,
         barcode: result.barcode,
         partNumber: result.partNumber,
-        productName: result.vehicleModel,
+        productName: result.productName ?? '',
         orderQuantity,
         rawJson: stringifyRawData(result.rawData),
         fetchedAt: nowUtc()
@@ -58,7 +58,7 @@ export class ProductionPlansService {
       update: {
         barcode: result.barcode,
         partNumber: result.partNumber,
-        productName: result.vehicleModel,
+        productName: result.productName ?? '',
         orderQuantity,
         rawJson: stringifyRawData(result.rawData),
         fetchedAt: nowUtc()

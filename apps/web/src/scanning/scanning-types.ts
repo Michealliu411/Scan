@@ -20,7 +20,9 @@ export type ResolvedPart = {
   kind?: 'RESOLVED_PART';
   barcode: string;
   partNumber: string;
-  vehicleModel: string;
+  productName?: string | null;
+  vehicleModel: string | null;
+  partName?: string | null;
   productionOrderNo?: string;
   orderQuantity?: number;
   dailyPlan?: DailyPlanScanSummary;
@@ -55,7 +57,9 @@ export type InspectionDetailRecord = {
   productionOrderNo?: string | null;
   dailyProductionPlanId?: string | null;
   partNumber: string;
+  productName?: string | null;
   vehicleModel: string | null;
+  partName?: string | null;
   result: InspectionResult;
   deductionAmount?: number;
   scannedAt: string;
@@ -73,7 +77,9 @@ export type SubmitInspectionRecordPayload = {
   barcode: string;
   productionOrderNo?: string;
   partNumber: string;
+  productName?: string;
   vehicleModel?: string;
+  partName?: string;
   operatorProfileId?: string;
   result: InspectionResult;
   defectReasonIds?: string[];
