@@ -4,7 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RELEASE_DIR="${SCAN_RELEASE_DIR:-"$ROOT_DIR/releases"}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-PACKAGE_PATH="$RELEASE_DIR/scan-windows-$STAMP.zip"
+PACKAGE_MODE="${SCAN_PACKAGE_MODE:-full}"
+if [[ "$PACKAGE_MODE" != "full" && "$PACKAGE_MODE" != "update" ]]; then
+  printf 'SCAN_PACKAGE_MODE must be full or update.\n' >&2
+  exit 1
+fi
+
+PACKAGE_KIND="scan-windows"
+if [[ "$PACKAGE_MODE" == "update" ]]; then
+  PACKAGE_KIND="scan-windows-update"
+fi
+
+PACKAGE_PATH="$RELEASE_DIR/$PACKAGE_KIND-$STAMP.zip"
 STAGING_DIR="${TMPDIR:-/tmp}/scan-windows-package-$STAMP"
 APP_DIR="$STAGING_DIR/Scan"
 DATA_DIR="$STAGING_DIR/ScanData"
@@ -52,11 +63,15 @@ WARN
 fi
 
 rm -rf "$STAGING_DIR"
-mkdir -p "$APP_DIR" "$DATA_DIR" "$RELEASE_DIR"
+mkdir -p "$APP_DIR" "$RELEASE_DIR"
+if [[ "$PACKAGE_MODE" == "full" ]]; then
+  mkdir -p "$DATA_DIR"
+fi
 
 rsync -a "$ROOT_DIR/" "$APP_DIR/" \
   --exclude '.git/' \
   --exclude '.planning/' \
+  --exclude '.superpowers/' \
   --exclude '.pnpm-store/' \
   --exclude 'node_modules/' \
   --exclude 'coverage/' \
@@ -69,16 +84,20 @@ rsync -a "$ROOT_DIR/" "$APP_DIR/" \
   --exclude '*.tsbuildinfo' \
   --exclude '.DS_Store'
 
-DB_PATH="$(find_database || true)"
-if [[ -n "$DB_PATH" && -f "$DB_PATH" ]]; then
-  cp "$DB_PATH" "$DATA_DIR/scan.db"
-  printf 'Included database: %s\n' "$DB_PATH"
-else
-  printf 'No SQLite database found. Package will deploy with a new database.\n'
+if [[ "$PACKAGE_MODE" == "full" ]]; then
+  DB_PATH="$(find_database || true)"
+  if [[ -n "$DB_PATH" && -f "$DB_PATH" ]]; then
+    cp "$DB_PATH" "$DATA_DIR/scan.db"
+    printf 'Included database: %s\n' "$DB_PATH"
+  else
+    printf 'No SQLite database found. Package will deploy with a new database.\n'
+  fi
 fi
 
 cat > "$STAGING_DIR/README-WINDOWS.txt" <<'README'
 Windows Server deployment:
+
+This is a full installation package. It includes ScanData\scan.db only for a new server where C:\scan\data\scan.db does not exist.
 
 1. Install Node.js LTS.
 2. Extract this zip to C:\scan.
@@ -115,9 +134,36 @@ Daily online backup:
 - View the result: Get-Content C:\scan\logs\database-backup.log -Tail 80
 README
 
-(cd "$STAGING_DIR" && zip -qr "$PACKAGE_PATH" Scan ScanData README-WINDOWS.txt)
+if [[ "$PACKAGE_MODE" == "update" ]]; then
+  cat > "$STAGING_DIR/README-WINDOWS.txt" <<'README'
+Windows Server update package:
+
+This package intentionally contains no ScanData directory and no scan.db file.
+It must be extracted over C:\scan on an existing Scan server. The existing
+C:\scan\data\scan.db is preserved; the deployment script backs it up and then
+applies compatible Prisma migrations.
+
+Run PowerShell as Administrator:
+
+  cd C:\scan\Scan
+  Set-ExecutionPolicy -Scope Process Bypass
+  .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "192.168.1.144" -SkipInstall -SkipBuild
+
+Do not use -SkipDatabase for releases with database migrations.
+Do not use -SkipTasks because this release registers ScanDatabaseBackup.
+README
+fi
+
+if [[ "$PACKAGE_MODE" == "full" ]]; then
+  (cd "$STAGING_DIR" && zip -qr "$PACKAGE_PATH" Scan ScanData README-WINDOWS.txt)
+else
+  (cd "$STAGING_DIR" && zip -qr "$PACKAGE_PATH" Scan README-WINDOWS.txt)
+fi
 rm -rf "$STAGING_DIR"
 
 printf 'Created Windows deployment package:\n%s\n' "$PACKAGE_PATH"
-printf '\nOffline update reminder:\n'
-printf 'For existing offline servers with unchanged dependencies/schema, run deploy with -SkipInstall -SkipDatabase. Add -SkipBuild only after verifying the bundled frontend API URL.\n'
+if [[ "$PACKAGE_MODE" == "update" ]]; then
+  printf '\nUpdate package: no ScanData or scan.db included.\n'
+else
+  printf '\nFull installation package: includes ScanData only for new server initialization.\n'
+fi

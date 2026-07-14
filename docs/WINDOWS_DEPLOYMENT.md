@@ -40,6 +40,14 @@ To force a specific database:
 SCAN_DB_PATH=/absolute/path/to/dev.db ./scripts/package-windows.sh
 ```
 
+为已有现场服务器制作更新包时，必须使用不携带数据库的更新模式：
+
+```bash
+SCAN_PACKAGE_MODE=update ./scripts/package-windows.sh
+```
+
+该包只包含 `Scan` 应用目录和更新说明，明确不包含 `ScanData`、`scan.db` 或其他数据库文件。更新时现场已有的 `C:\scan\data\scan.db` 由部署脚本先备份，再执行迁移；不得人工用包内数据库替换它。
+
 ## 2. Prepare A New Windows Server
 
 A brand-new server needs Node.js LTS and dependencies. Because field servers are
