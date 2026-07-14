@@ -16,7 +16,10 @@ test('registers an online database backup task at 02:00 under SYSTEM', () => {
 
 test('generates online SQLite backup files instead of copying the active database', () => {
   assert.match(deployScript, /VACUUM INTO/);
-  assert.match(deployScript, /prisma db execute --stdin --url `\$env:DATABASE_URL/);
+  assert.match(deployScript, /apps\\api\\node_modules\\\.bin\\prisma\.cmd/);
+  assert.match(deployScript, /& `\$prismaPath db execute --stdin --url `\$env:DATABASE_URL/);
+  assert.match(deployScript, /Write-BackupLog "PRISMA/);
+  assert.doesNotMatch(deployScript, /pnpm --filter "@scan\/api" exec prisma db execute/);
   assert.match(deployScript, /\.partial/);
   assert.match(deployScript, /database-backup\.log/);
   assert.match(deployScript, /scan-db-\*\.db/);

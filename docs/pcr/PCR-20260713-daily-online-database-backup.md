@@ -51,3 +51,7 @@ Unregister-ScheduledTask -TaskName ScanDatabaseBackup -Confirm:$false
 - 已使用 Prisma CLI 对独立临时 SQLite 库执行 `VACUUM INTO`，并从生成库读取到原始数据。
 - 全量 API/前端测试（10 个 API 测试套件共 76 项、9 个前端测试文件共 64 项）及生产构建通过。
 - 本机未安装 Windows PowerShell/任务计划程序；发布后须按手册手工启动一次 `ScanDatabaseBackup` 并确认 `C:\backup` 与日志结果。
+
+## 9. 现场故障修复记录
+
+2026-07-14 首次现场运行显示任务已注册但退出码为 1，日志仅记录 Prisma 命令失败。原因是计划任务在 SYSTEM 环境中不能可靠使用管理员账户可见的全局 `pnpm`。已改为直接调用项目本地 `apps\api\node_modules\.bin\prisma.cmd`，并将 Prisma 标准输出和错误逐行写入备份日志。修复后的更新包仍不包含任何数据库文件；现场需重新更新后手工执行任务验收。

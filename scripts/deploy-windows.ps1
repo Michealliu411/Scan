@@ -291,6 +291,7 @@ function Write-DatabaseBackupScript {
 `$backupRoot = "$BackupRoot"
 `$backupLogPath = "$backupLogPath"
 `$retentionDays = $RetentionDays
+`$prismaPath = Join-Path `$projectRoot "apps\api\node_modules\.bin\prisma.cmd"
 
 function Write-BackupLog {
   param([string]`$Message)
@@ -326,10 +327,17 @@ try {
   `$sqlBackupPath = `$partialPath.Replace('\', '/').Replace("'", "''")
   `$sql = "VACUUM INTO '`$sqlBackupPath';"
 
-  Set-Location `$projectRoot
-  `$sql | & pnpm --filter "@scan/api" exec prisma db execute --stdin --url `$env:DATABASE_URL
-  if (`$LASTEXITCODE -ne 0) {
-    throw "Prisma online backup command failed with exit code `$LASTEXITCODE"
+  if (-not (Test-Path `$prismaPath)) {
+    throw "Project Prisma CLI is missing: `$prismaPath"
+  }
+
+  `$prismaOutput = @(`$sql | & `$prismaPath db execute --stdin --url `$env:DATABASE_URL 2>&1)
+  `$prismaExitCode = `$LASTEXITCODE
+  foreach (`$line in `$prismaOutput) {
+    Write-BackupLog "PRISMA `$line"
+  }
+  if (`$prismaExitCode -ne 0) {
+    throw "Prisma online backup command failed with exit code `$prismaExitCode"
   }
 
   if (-not (Test-Path `$partialPath) -or (Get-Item `$partialPath).Length -le 0) {
