@@ -179,6 +179,16 @@ Phase 06 is complete and the post-v1 adjustment pass has already added real scan
 3. Operational visibility: expose enough health and version information for support without widening normal operator workflows.
 4. Deferred items that stay later: formal shift scheduling and richer reporting remain good future phases, but they are not the sharpest current pain.
 
+### Phase 7: Production Quality Daily Report
+
+**Goal:** Deliver an exportable once-through quality daily report using global first-inspection attribution, the updated production-order fields, and historical-data-safe migration.
+
+**Success Criteria:**
+1. Query users and administrators can retrieve the Beijing natural-month report by optional production line; inspectors are blocked.
+2. A barcode is counted only from its globally earliest inspection and never moves to a later reinspection month.
+3. All defect reasons, including inactive reasons, are returned in code order and exported with the same two-level headers as the approved sample.
+4. Existing records remain intact and their former `vehicleModel` product-name content is safely retained as `productName` rather than shown as vehicle model.
+
 ---
 *Roadmap created: 2026-05-06*
 *Last updated: 2026-05-18 after post-v1 status alignment*

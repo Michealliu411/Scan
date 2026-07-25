@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { ScanLookupGateway, ScanLookupResult } from './scan-lookup.gateway';
 
 const defaultLookupUrl =
-  'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
+  'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
 
 type ProductionOrderLookupResponse = {
   ErrCode?: number;

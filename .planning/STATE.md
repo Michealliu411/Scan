@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: post-v1-field-hardening
-status: Daily production plan multi-line order allocation implemented and under final verification
-last_updated: "2026-06-08T14:45:00+08:00"
+status: Production quality daily report and online database backup implemented; ready for Windows release packaging and task verification
+last_updated: "2026-07-13T18:20:00+08:00"
 progress:
   total_phases: 6
   completed_phases: 6
@@ -68,6 +68,11 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - Normal water-wash scan submissions are now bound to a same-day active production plan by production order. Missing plan or completed qualified quantity blocks qualified submission and writes an operation log; special barcode workflows remain separate.
 - Daily production plans are explicitly bound to one selected production line. The uniqueness rule is `businessDate + productionOrderNo + productionLineId`, so the same order can be planned on multiple lines on the same day while each line has at most one plan for that order.
 - Existing inspection records are retained through the additive daily-plan migration. Records created before this change have empty production-order/plan fields and remain available in original inspection queries but are not counted in new order-completion statistics.
+- Production quality daily report is a query-analysis tab for `QUERY` and `ADMIN` only. It groups by Beijing natural month/day, production line, vehicle model, part, and the fixed workshop/process value `缝纫`; its numerator and defect reasons are each barcode's globally first inspection record, including current manual corrections to that record.
+- The updated water-wash-label interface maps `成品车型` to vehicle model and `成品品名` to report part. The values are preserved as returned, including blanks. A future additive migration will retain the old lookup product name separately and must not reinterpret historical `vehicleModel` values as vehicle models.
+- Production quality daily report implementation uses an additive snapshot migration: legacy `vehicleModel` values were copied to `productName` then cleared, so historical records retain raw product data without being misrepresented as vehicle models; historical report model and part remain blank.
+- Windows deployment now registers `ScanDatabaseBackup` as a SYSTEM task at 02:00. It uses SQLite `VACUUM INTO` through Prisma CLI, writes consistent backups to `C:\backup`, retains 30 days by default, and never stops ScanApi or ScanWeb.
+- Existing-server release packaging uses `SCAN_PACKAGE_MODE=update`: it excludes `ScanData` and all database files, so only the deployed `C:\scan\data\scan.db` is backed up and migrated.
 
 ## Roadmap Position
 
@@ -82,6 +87,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 
 - No v1 verification debt currently tracked.
 - Next-phase planning should decide whether field hardening becomes a small `v1.1` milestone or the first formal `v2` phase.
+- Development `apps/api/prisma/dev.db` has a pre-existing Prisma migration drift. It was not reset during verification; use a backed-up release database for deployment migration validation.
+- `ScanDatabaseBackup` needs one post-release Windows Server manual run to confirm task registration, SYSTEM permissions, `C:\backup` write access, and readable output on the real server.
 
 ## Recent Activity
 
@@ -110,6 +117,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - 2026-05-07: Created Phase 4 context, UI contract, research, validation strategy, and three execution plans for special barcode workflows.
 - 2026-05-07: Completed Plan 04-01 with special barcode admin APIs, UUID generation, backend reference protection, dirty auto-submit scan matching, no-barcode product lookup matching, and backend e2e coverage.
 - 2026-05-07: Completed Plan 04-02 with the special barcode admin tab, UUID preview/create flows, scanner dirty auto-submit handling, and frontend tests.
+- 2026-07-13: Implemented the production quality daily report: updated lookup mapping and historical snapshots, first-inspection API, query-analysis page with all dynamic defect columns, Excel export, API/frontend tests, production build, and isolated-browser verification.
 - 2026-05-07: Completed Plan 04-03 with full project verification, browser special barcode UAT, Phase 4 verification report, and requirement status updates.
 - 2026-05-07: Created Phase 5 context, UI contract, research, validation strategy, and three execution plans for query analysis and dashboard.
 - 2026-05-07: Completed Plan 05-01 with backend analytics dashboard API, detail-query records API, Beijing detail date-range helper, and backend e2e coverage.
@@ -145,6 +153,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-18)
 - 2026-06-08: Added reopen support for manually closed daily production plans with query/admin API action, frontend table control, and operation-log audit.
 - 2026-06-08: Bound daily production plans to a selected production line, retained one-order-one-line-per-day uniqueness, enforced scan-line matching, and documented PCR `PCR-20260608-daily-plan-production-line-binding`.
 - 2026-06-08: Revised daily plan uniqueness after customer confirmation so one production order can be issued to multiple production lines on the same day; quantities are user-controlled and scan binding uses the current login line.
+- 2026-07-13: Confirmed production quality daily report scope and UI: a clean report tab with year/month/production-line filters, full dynamic defect-reason columns, and Excel export. It will use each barcode's globally first inspection for the once-through result and defect attribution, while applying current corrections to that first record.
+- 2026-07-13: Implemented daily 02:00 online SQLite backup deployment support: `ScanDatabaseBackup` runs as SYSTEM, uses Prisma-driven `VACUUM INTO`, writes `C:\backup`, keeps 30 days, logs results separately, and leaves ScanApi/ScanWeb running.
+- 2026-07-14: Added a database-free Windows update-package mode and verified its ZIP contains no `ScanData` or `.db` files, protecting existing production SQLite data from accidental package replacement.
+- 2026-07-14: Fixed the online backup task's SYSTEM-account compatibility by replacing global `pnpm` invocation with the project-local Prisma CLI and by logging Prisma command output for field diagnosis.
 
 ## Session Continuity
 

@@ -76,6 +76,7 @@ export type QualityDailyReportResponse = {
     partName: string | null;
     workshop: '缝纫';
     process: '缝纫';
+    productionOrderQuantity: number;
     productionQuantity: number;
     qualifiedQuantity: number;
     unqualifiedQuantity: number;

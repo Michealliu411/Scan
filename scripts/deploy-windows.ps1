@@ -403,14 +403,6 @@ function Register-DatabaseBackupTask {
     -Force | Out-Null
 }
 
-function Restart-ScanTask {
-  param([string]$TaskName)
-
-  Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-  Start-Sleep -Seconds 1
-  Start-ScheduledTask -TaskName $TaskName
-}
-
 function Stop-ScanTask {
   param([string]$TaskName)
 
@@ -439,18 +431,88 @@ function Stop-ProjectNodeProcesses {
   }
 }
 
-function Test-HttpEndpoint {
+function Assert-PortsReleased {
   param(
-    [string]$Name,
-    [string]$Url
+    [int[]]$Ports,
+    [int]$TimeoutSeconds = 10
   )
 
-  try {
-    Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 8 | Out-Null
-    Write-Host "$Name OK: $Url" -ForegroundColor Green
-  } catch {
-    Write-WarningLine "$Name did not respond yet: $Url"
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $listeners = @()
+
+  do {
+    $listeners = @(
+      foreach ($port in $Ports) {
+        Get-NetTCPConnection `
+          -LocalPort $port `
+          -State Listen `
+          -ErrorAction SilentlyContinue
+      }
+    )
+
+    if ($listeners.Count -eq 0) {
+      Write-Host "Ports released: $($Ports -join ', ')" -ForegroundColor Green
+      return
+    }
+
+    Start-Sleep -Milliseconds 500
+  } while ((Get-Date) -lt $deadline)
+
+  $listenerDetails = foreach ($listener in $listeners) {
+    $process = Get-CimInstance `
+      Win32_Process `
+      -Filter "ProcessId = $($listener.OwningProcess)" `
+      -ErrorAction SilentlyContinue
+    $commandLine = if ($process) { $process.CommandLine } else { "unknown" }
+    "port=$($listener.LocalPort), pid=$($listener.OwningProcess), command=$commandLine"
   }
+
+  throw "Ports are still occupied after stopping Scan services: $($listenerDetails -join '; ')"
+}
+
+function Restart-ScanServices {
+  param(
+    [string]$ProjectRoot,
+    [int]$ApiPort,
+    [int]$WebPort
+  )
+
+  Stop-ScanTask "ScanApi"
+  Stop-ScanTask "ScanWeb"
+  Start-Sleep -Seconds 2
+  Stop-ProjectNodeProcesses $ProjectRoot
+  Assert-PortsReleased @($ApiPort, $WebPort)
+  Start-ScheduledTask -TaskName "ScanApi"
+  Start-ScheduledTask -TaskName "ScanWeb"
+}
+
+function Wait-HttpEndpoint {
+  param(
+    [string]$Name,
+    [string]$Url,
+    [int]$TimeoutSeconds = 30
+  )
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $lastError = "not attempted"
+
+  do {
+    try {
+      $response = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 5
+      if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
+        Write-Host "$Name OK: $Url" -ForegroundColor Green
+        return
+      }
+
+      $lastError = "HTTP $($response.StatusCode)"
+    } catch {
+      $lastError = $_.Exception.Message
+    }
+
+    Start-Sleep -Seconds 1
+  } while ((Get-Date) -lt $deadline)
+
+  throw "$Name health check failed after $TimeoutSeconds seconds: $Url ($lastError)"
 }
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -513,14 +575,12 @@ if (-not $ScanLookupUrl) {
 }
 
 if ($Mode -eq "Restart") {
-  Write-Step "Restarting app tasks"
-  Restart-ScanTask "ScanApi"
-  Restart-ScanTask "ScanWeb"
-  Start-Sleep -Seconds 4
+  Write-Step "Restarting app tasks and terminating residual Node processes"
+  Restart-ScanServices $ProjectRoot $ApiPort $WebPort
 
   Write-Step "Health checks"
-  Test-HttpEndpoint "API" "http://127.0.0.1:$ApiPort/production-lines"
-  Test-HttpEndpoint "Web" "http://127.0.0.1:$WebPort/"
+  Wait-HttpEndpoint "API" "http://127.0.0.1:$ApiPort/production-lines"
+  Wait-HttpEndpoint "Web" "http://127.0.0.1:$WebPort/"
 
   Write-Step "Restart complete"
   Write-Host "Open: $WebOrigin" -ForegroundColor Green
@@ -637,16 +697,13 @@ if (-not $SkipTasks) {
   Register-ScanTask "ScanWeb" $runnerScripts.WebRunner
   Register-DatabaseBackupTask $databaseBackupScriptPath
 
-  Write-Step "Starting app tasks"
-  Restart-ScanTask "ScanApi"
-  Restart-ScanTask "ScanWeb"
-
-  Start-Sleep -Seconds 4
+  Write-Step "Starting app tasks after terminating residual Node processes"
+  Restart-ScanServices $ProjectRoot $ApiPort $WebPort
 }
 
 Write-Step "Health checks"
-Test-HttpEndpoint "API" "http://127.0.0.1:$ApiPort/production-lines"
-Test-HttpEndpoint "Web" "http://127.0.0.1:$WebPort/"
+Wait-HttpEndpoint "API" "http://127.0.0.1:$ApiPort/production-lines"
+Wait-HttpEndpoint "Web" "http://127.0.0.1:$WebPort/"
 
 Write-Step "Deployment complete"
 Write-Host "Open: $WebOrigin" -ForegroundColor Green
@@ -656,10 +713,7 @@ Write-Host "Logs: $LogsDir"
 Write-Host "Daily database backup: $BackupRoot (02:00, keep $BackupRetentionDays days)"
 Write-Host ""
 Write-Host "Useful commands:"
-Write-Host "  Start-ScheduledTask ScanApi"
-Write-Host "  Stop-ScheduledTask ScanApi"
-Write-Host "  Start-ScheduledTask ScanWeb"
-Write-Host "  Stop-ScheduledTask ScanWeb"
+Write-Host "  .\scripts\deploy-windows.ps1 -Mode Restart -ServerIp `"$ServerIp`""
 Write-Host "  Get-Content $LogsDir\api.log -Tail 80"
 Write-Host "  Get-Content $LogsDir\web.log -Tail 80"
 Write-Host "  Start-ScheduledTask ScanDatabaseBackup"

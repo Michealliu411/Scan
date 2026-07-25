@@ -144,7 +144,7 @@ database migrations must run:
 
 Full update mode:
 
-- stops `ScanApi` and `ScanWeb`;
+- stops `ScanApi` and `ScanWeb`, then terminates residual Node processes belonging to this project;
 - backs up `C:\scan\data\scan.db` to `C:\scan\backups`;
 - keeps the existing `COOKIE_SECRET` from `.env`;
 - installs dependencies;
@@ -180,6 +180,18 @@ Restart the app:
 cd C:\scan\Scan
 .\scripts\deploy-windows.ps1 -Mode Restart -ServerIp "192.168.1.144"
 ```
+
+This is the only supported manual restart command. Install, Update, and Restart
+always stop both `ScanApi` and `ScanWeb`, terminate residual Node processes, and
+then start both tasks together. Do not restart only one scheduled task: stopping
+the task wrapper may leave its child Node process running with stale environment
+configuration.
+
+Before startup, ports 3000 and 8080 must be released. If either port remains
+occupied, the script reports its PID and command line and fails without killing
+an unrelated process. After startup, API and Web health checks must pass within
+30 seconds; otherwise the deployment exits with an error and must not be treated
+as successful.
 
 View logs:
 

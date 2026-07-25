@@ -430,7 +430,7 @@ function DashboardTab({
       },
       xAxis: {
         type: 'category',
-        data: dashboard?.productionLineTotals.map((line) => line.productionLineCode) ?? []
+        data: dashboard?.productionLineTotals.map((line) => line.productionLineName) ?? []
       },
       yAxis: { type: 'value' },
       series: [
@@ -644,7 +644,7 @@ function QualityDailyReportTab({
         <table className="master-table quality-report-table" aria-label="生产质量日报">
           <thead>
             <tr>
-              {['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产数量', '合格品数量', '不合格数量', '合格率'].map((label) => (
+              {['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产订单数量', '生产数量', '合格品数量', '不合格数量', '合格率'].map((label) => (
                 <th key={label} rowSpan={2}>{label}</th>
               ))}
               <th colSpan={Math.max(report?.defectReasons.length ?? 0, 1)}>不合格统计</th>
@@ -668,6 +668,7 @@ function QualityDailyReportTab({
                   <td>{row.vehicleModel || '-'}</td>
                   <td>{row.partName || '-'}</td>
                   <td>{row.process}</td>
+                  <td>{row.productionOrderQuantity}</td>
                   <td>{row.productionQuantity}</td>
                   <td>{row.qualifiedQuantity}</td>
                   <td>{row.unqualifiedQuantity}</td>
@@ -677,7 +678,7 @@ function QualityDailyReportTab({
               ))
             ) : (
               <tr>
-                <td colSpan={12 + (report?.defectReasons.length ?? 0)}>
+                <td colSpan={13 + (report?.defectReasons.length ?? 0)}>
                   {report ? '所选条件下暂无质量日报数据' : '请设置条件后查询质量日报'}
                 </td>
               </tr>
@@ -1440,7 +1441,7 @@ async function exportQualityDailyReport(
   }
 
   const XLSX = await import('xlsx');
-  const fixedHeaders = ['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产数量', '合格品数量', '不合格数量', '合格率'];
+  const fixedHeaders = ['序号', '月份', '日期', '产线', '车型', '部件', '工序', '生产订单数量', '生产数量', '合格品数量', '不合格数量', '合格率'];
   const reasonHeaders = report.defectReasons.map((reason) => `${reason.code} ${reason.name}`);
   const rows: Array<Array<string | number>> = [
     ['生产质量日报表（一次下线合格率）'],
@@ -1455,6 +1456,7 @@ async function exportQualityDailyReport(
       row.vehicleModel ?? '',
       row.partName ?? '',
       row.process,
+      row.productionOrderQuantity,
       row.productionQuantity,
       row.qualifiedQuantity,
       row.unqualifiedQuantity,

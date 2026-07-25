@@ -16,6 +16,9 @@ import {
 const chartDisposeMock = vi.fn();
 const chartResizeMock = vi.fn();
 const chartSetOptionMock = vi.fn();
+const aoaToSheetMock = vi.fn((_rows: Array<Array<string | number>>) => ({}));
+const bookAppendSheetMock = vi.fn();
+const writeFileMock = vi.fn();
 
 vi.mock('echarts', () => ({
   init: vi.fn(() => ({
@@ -23,6 +26,15 @@ vi.mock('echarts', () => ({
     resize: chartResizeMock,
     dispose: chartDisposeMock
   }))
+}));
+
+vi.mock('xlsx', () => ({
+  utils: {
+    aoa_to_sheet: aoaToSheetMock,
+    book_new: vi.fn(() => ({})),
+    book_append_sheet: bookAppendSheetMock
+  },
+  writeFile: writeFileMock
 }));
 
 vi.mock('./query-api', () => ({
@@ -115,6 +127,7 @@ describe('QueryAnalysisPage', () => {
           partName: '部件-日报',
           workshop: '缝纫',
           process: '缝纫',
+          productionOrderQuantity: 500,
           productionQuantity: 10,
           qualifiedQuantity: 8,
           unqualifiedQuantity: 2,
@@ -252,7 +265,7 @@ describe('QueryAnalysisPage', () => {
             bottom: 64
           }),
           xAxis: expect.objectContaining({
-            data: ['LINE-01']
+            data: ['一号线']
           }),
           series: [
             expect.objectContaining({ name: '总产出', type: 'bar', data: [2] }),
@@ -293,11 +306,18 @@ describe('QueryAnalysisPage', () => {
 
     const table = await screen.findByRole('table', { name: '生产质量日报' });
     expect(within(table).getByText('部件')).toBeTruthy();
+    expect(within(table).getByText('生产订单数量')).toBeTruthy();
     expect(within(table).getByText('A0 错缝')).toBeTruthy();
     expect(within(table).getByText('A1 漏缝')).toBeTruthy();
     expect(within(table).getByText('部件-日报')).toBeTruthy();
     expect(within(table).getByText('80%')).toBeTruthy();
     expect(screen.getByRole('button', { name: '导出 Excel' })).not.toHaveProperty('disabled', true);
+
+    fireEvent.click(screen.getByRole('button', { name: '导出 Excel' }));
+    await waitFor(() => expect(writeFileMock).toHaveBeenCalled());
+    const exportedRows = aoaToSheetMock.mock.calls.at(-1)?.[0];
+    expect(exportedRows?.[2]).toContain('生产订单数量');
+    expect(exportedRows?.[4]?.[7]).toBe(500);
   });
 
   it('opens the dashboard in a full-screen view and exits with Escape', async () => {

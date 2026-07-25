@@ -49,7 +49,7 @@ Expected: FAIL，因为返回类型尚未包含 `productName`、`partName`，且
 
 - [ ] **Step 3: 实现最小字段映射与持久化链路**
 
-将默认地址改为 `http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai`；保留零件号为唯一必填外部字段；将 `成品产品名称`、`成品车型`、`成品品名` 分别解析为可空值。扫码解析响应、提交 DTO、合格/不合格创建路径和响应序列化均传递三个字段。
+将默认地址改为 `http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai`；保留零件号为唯一必填外部字段；将 `成品产品名称`、`成品车型`、`成品品名` 分别解析为可空值。扫码解析响应、提交 DTO、合格/不合格创建路径和响应序列化均传递三个字段。
 
 - [ ] **Step 4: 增加 Prisma 模型与安全迁移**
 

@@ -141,6 +141,11 @@
 - **RPT-01**: Users can export detail query results.
 - **RPT-02**: Dashboard can compare month-over-month quality trends.
 - **RPT-03**: Dashboard can show defect reason distribution in addition to defect part distribution.
+- **RPT-04**: Query and admin users can query and export a Beijing-natural-month production quality daily report based on each barcode's globally first inspection, grouped by daily production line, vehicle model, part, and all defect reasons.
+
+### Operational Reliability
+
+- [x] **OPS-01**: Windows deployment registers a SYSTEM daily 02:00 online SQLite backup task that writes consistent backups to `C:\backup` without stopping ScanApi or ScanWeb.
 
 ## Out of Scope
 
@@ -217,6 +222,7 @@
 | UI-04 | Phase 6 | Complete |
 | UI-05 | Phase 6 | Complete |
 | PLAT-04 | Phase 6 | Complete |
+| OPS-01 | Post-v1 field hardening | Complete (Windows handoff verification pending) |
 
 **Coverage:**
 - v1 requirements: 62 total

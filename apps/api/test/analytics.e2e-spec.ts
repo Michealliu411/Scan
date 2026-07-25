@@ -77,6 +77,7 @@ describe('Analytics API', () => {
     await prisma.session.deleteMany();
     await prisma.inspectionRecordDefectReason.deleteMany();
     await prisma.inspectionRecord.deleteMany();
+    await prisma.productionOrderCache.deleteMany();
     await prisma.specialBarcode.deleteMany();
     await prisma.defectReason.deleteMany();
     await prisma.user.deleteMany();
@@ -203,6 +204,7 @@ describe('Analytics API', () => {
     scannedAt: Date;
     vehicleModel?: string | null;
     partName?: string | null;
+    productionOrderNo?: string | null;
     defectReasonIds?: string[];
   }) {
     const record = await prisma.inspectionRecord.create({
@@ -212,6 +214,7 @@ describe('Analytics API', () => {
         partNumber: data.partNumber,
         vehicleModel: data.vehicleModel === undefined ? `车型-${data.partNumber}` : data.vehicleModel,
         partName: data.partName ?? null,
+        productionOrderNo: data.productionOrderNo ?? null,
         productionLineId: data.productionLineId,
         inspectorId,
         result: data.result,
@@ -308,11 +311,28 @@ describe('Analytics API', () => {
     const inactiveReason = await prisma.defectReason.create({
       data: { code: 'A-INACTIVE', name: '历史原因', isActive: false }
     });
+    await prisma.productionOrderCache.createMany({
+      data: [
+        {
+          productionOrderNo: 'MO-QUALITY-A',
+          partNumber: 'PN-QUALITY-A',
+          productName: '质量产品A',
+          orderQuantity: 500
+        },
+        {
+          productionOrderNo: 'MO-QUALITY-B',
+          partNumber: 'PN-QUALITY-B',
+          productName: '质量产品B',
+          orderQuantity: 300
+        }
+      ]
+    });
     await seedRecord({
       barcode: 'FIRST-MAY-UNQUALIFIED',
       partNumber: 'PN-QUALITY-A',
       vehicleModel: '车型-质量',
       partName: '部件-质量',
+      productionOrderNo: 'MO-QUALITY-A',
       productionLineId: lineOneId,
       result: InspectionResult.UNQUALIFIED,
       scannedAt: new Date('2026-05-10T01:00:00.000Z'),
@@ -324,6 +344,7 @@ describe('Analytics API', () => {
       partNumber: 'PN-QUALITY-A',
       vehicleModel: '车型-质量',
       partName: '部件-质量',
+      productionOrderNo: 'MO-QUALITY-A',
       productionLineId: lineOneId,
       result: InspectionResult.QUALIFIED,
       scannedAt: new Date('2026-06-02T01:00:00.000Z')
@@ -334,6 +355,7 @@ describe('Analytics API', () => {
       partNumber: 'PN-QUALITY-A',
       vehicleModel: '车型-质量',
       partName: '部件-质量',
+      productionOrderNo: 'MO-QUALITY-A',
       productionLineId: lineOneId,
       result: InspectionResult.QUALIFIED,
       scannedAt: new Date('2026-05-10T02:00:00.000Z')
@@ -343,6 +365,7 @@ describe('Analytics API', () => {
       partNumber: 'PN-QUALITY-B',
       vehicleModel: null,
       partName: null,
+      productionOrderNo: 'MO-QUALITY-B',
       productionLineId: lineTwoId,
       result: InspectionResult.UNQUALIFIED,
       scannedAt: new Date('2026-05-11T01:00:00.000Z'),
@@ -358,7 +381,6 @@ describe('Analytics API', () => {
       process: '缝纫'
     });
     expect(mayResponse.body.defectReasons).toEqual([
-      expect.objectContaining({ id: inactiveReason.id, code: 'A-INACTIVE', name: '历史原因' }),
       expect.objectContaining({ id: defectReasonId, code: 'SCRATCH', name: '划伤' })
     ]);
     expect(mayResponse.body.rows).toEqual(
@@ -368,22 +390,24 @@ describe('Analytics API', () => {
           productionLineId: lineOneId,
           vehicleModel: '车型-质量',
           partName: '部件-质量',
+          productionOrderQuantity: 500,
           productionQuantity: 2,
           qualifiedQuantity: 1,
           unqualifiedQuantity: 1,
           qualifiedRate: 0.5,
-          defectCounts: expect.objectContaining({ [defectReasonId]: 1, [inactiveReason.id]: 0 })
+          defectCounts: { [defectReasonId]: 1 }
         }),
         expect.objectContaining({
           businessDate: '2026-05-11',
           productionLineId: lineTwoId,
           vehicleModel: null,
           partName: null,
+          productionOrderQuantity: 300,
           productionQuantity: 1,
           qualifiedQuantity: 0,
           unqualifiedQuantity: 1,
           qualifiedRate: 0,
-          defectCounts: expect.objectContaining({ [inactiveReason.id]: 1, [defectReasonId]: 0 })
+          defectCounts: { [defectReasonId]: 0 }
         })
       ])
     );

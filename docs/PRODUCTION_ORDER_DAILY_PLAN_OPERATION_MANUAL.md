@@ -30,14 +30,7 @@
 
 1. 将新的 `scan-windows-*.zip` 更新包复制到服务器。
 2. 打开“管理员 PowerShell”。
-3. 停止当前服务，避免覆盖文件时被占用：
-
-```powershell
-Stop-ScheduledTask -TaskName ScanApi
-Stop-ScheduledTask -TaskName ScanWeb
-```
-
-4. 解压新包到 `C:\scan`，覆盖其中的 `C:\scan\Scan` 程序目录。
+3. 解压新包到 `C:\scan`，覆盖其中的 `C:\scan\Scan` 程序目录。不要手工单独停止或启动某一个计划任务；后续部署命令会统一停止两个任务、清理残留 Node 进程并一起重启。
 
 注意：不要删除 `C:\scan\data`、`C:\scan\logs`、`C:\scan\backups`。
 
@@ -352,11 +345,11 @@ Get-ScheduledTaskInfo ScanWeb
 Get-Content C:\scan\logs\web.log -Tail 80
 ```
 
-重启 Web：
+按统一规则重启 API 和 Web：
 
 ```powershell
-Stop-ScheduledTask -TaskName ScanWeb
-Start-ScheduledTask -TaskName ScanWeb
+cd C:\scan\Scan
+.\scripts\deploy-windows.ps1 -Mode Restart -ServerIp "192.168.1.144"
 ```
 
 ### 8.5 页面能打开但扫码接口异常
@@ -395,28 +388,14 @@ Get-ChildItem C:\scan\backups | Sort-Object LastWriteTime -Descending | Select-O
 
 ## 9. 日常维护命令
 
-启动服务：
+标准重启命令：
 
 ```powershell
-Start-ScheduledTask -TaskName ScanApi
-Start-ScheduledTask -TaskName ScanWeb
+cd C:\scan\Scan
+.\scripts\deploy-windows.ps1 -Mode Restart -ServerIp "192.168.1.144"
 ```
 
-停止服务：
-
-```powershell
-Stop-ScheduledTask -TaskName ScanApi
-Stop-ScheduledTask -TaskName ScanWeb
-```
-
-重启服务：
-
-```powershell
-Stop-ScheduledTask -TaskName ScanApi
-Stop-ScheduledTask -TaskName ScanWeb
-Start-ScheduledTask -TaskName ScanApi
-Start-ScheduledTask -TaskName ScanWeb
-```
+该命令会停止 `ScanApi` 和 `ScanWeb`、结束本项目残留 Node 进程，确认 3000、8080 端口释放后再一起启动两个任务。API 和 Web 必须在 30 秒内通过健康检查，否则脚本会报错退出，不能视为重启成功。禁止将单独执行 `Stop-ScheduledTask`、`Start-ScheduledTask` 作为标准重启方法。
 
 查看任务状态：
 

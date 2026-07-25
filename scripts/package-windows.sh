@@ -113,6 +113,13 @@ Example:
 For future updates, extract the new zip over C:\scan and run:
    .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "SERVER_LAN_IP"
 
+Service restart rule:
+- Install, Update, and Restart stop both ScanApi and ScanWeb, terminate residual Node processes, and then start both tasks together.
+- Ports 3000 and 8080 must be released before startup; occupied ports fail the deployment without killing unrelated processes.
+- API and Web health checks must pass within the timeout or the deployment fails.
+- Do not restart only one scheduled task because its child Node process may remain on the old configuration.
+- Manual restart command: .\scripts\deploy-windows.ps1 -Mode Restart -ServerIp "SERVER_LAN_IP"
+
 Offline server note:
 - Servers are expected to have no internet access.
 - If this is an update and package dependencies and database schema did not change, use:
@@ -140,17 +147,20 @@ Windows Server update package:
 
 This package intentionally contains no ScanData directory and no scan.db file.
 It must be extracted over C:\scan on an existing Scan server. The existing
-C:\scan\data\scan.db is preserved; the deployment script backs it up and then
-applies compatible Prisma migrations.
+C:\scan\data\scan.db is preserved. This release has no database schema change,
+so the update command skips database migration.
 
 Run PowerShell as Administrator:
 
   cd C:\scan\Scan
   Set-ExecutionPolicy -Scope Process Bypass
-  .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "192.168.1.144" -SkipInstall -SkipBuild
+  .\scripts\deploy-windows.ps1 -Mode Update -ServerIp "192.168.1.144" -SkipInstall -SkipDatabase
 
-Do not use -SkipDatabase for releases with database migrations.
-Do not use -SkipTasks because this release registers ScanDatabaseBackup.
+The server rebuilds the web bundle so it uses http://192.168.1.144:3000 as the API address.
+Do not add -SkipBuild unless the bundle has been built specifically for this server IP.
+Install, Update, and Restart stop both ScanApi and ScanWeb, terminate residual Node processes, and then start both tasks together.
+Ports 3000 and 8080 must be released before startup, and API and Web health checks must pass or the update fails.
+Do not restart only one scheduled task. Use deploy-windows.ps1 -Mode Restart for manual restarts.
 README
 fi
 

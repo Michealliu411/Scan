@@ -93,8 +93,9 @@ export class AnalyticsService {
       await this.assertProductionLineExists(productionLineId);
     }
 
-    const [defectReasons, records] = await Promise.all([
+    const [defectReasons, records, productionOrderCaches] = await Promise.all([
       this.prisma.defectReason.findMany({
+        where: { isActive: true },
         orderBy: [{ code: 'asc' }, { name: 'asc' }],
         select: { id: true, code: true, name: true }
       }),
@@ -108,8 +109,15 @@ export class AnalyticsService {
           }
         },
         orderBy: [{ scannedAt: 'asc' }, { id: 'asc' }]
+      }),
+      this.prisma.productionOrderCache.findMany({
+        select: { productionOrderNo: true, orderQuantity: true }
       })
     ]);
+
+    const orderQuantityByProductionOrderNo = new Map(
+      productionOrderCaches.map((order) => [order.productionOrderNo, order.orderQuantity])
+    );
 
     const firstRecordsByBarcode = new Map<string, (typeof records)[number]>();
     for (const record of records) {
@@ -131,6 +139,8 @@ export class AnalyticsService {
         partName: string | null;
         workshop: '缝纫';
         process: '缝纫';
+        productionOrderQuantity: number;
+        productionOrderNos: Set<string>;
         productionQuantity: number;
         qualifiedQuantity: number;
         unqualifiedQuantity: number;
@@ -167,12 +177,20 @@ export class AnalyticsService {
           partName: record.partName,
           workshop: '缝纫',
           process: '缝纫',
+          productionOrderQuantity: 0,
+          productionOrderNos: new Set<string>(),
           productionQuantity: 0,
           qualifiedQuantity: 0,
           unqualifiedQuantity: 0,
           defectCounts: initialDefectCounts()
         };
         rowsByKey.set(key, row);
+      }
+
+      if (record.productionOrderNo && !row.productionOrderNos.has(record.productionOrderNo)) {
+        row.productionOrderNos.add(record.productionOrderNo);
+        row.productionOrderQuantity +=
+          orderQuantityByProductionOrderNo.get(record.productionOrderNo) ?? 0;
       }
 
       row.productionQuantity += 1;
@@ -203,7 +221,7 @@ export class AnalyticsService {
             (left.vehicleModel ?? '').localeCompare(right.vehicleModel ?? '') ||
             (left.partName ?? '').localeCompare(right.partName ?? '')
         )
-        .map(({ productionLineSortOrder: _sortOrder, ...row }) => ({
+        .map(({ productionLineSortOrder: _sortOrder, productionOrderNos: _orderNos, ...row }) => ({
           ...row,
           qualifiedRate: row.productionQuantity ? row.qualifiedQuantity / row.productionQuantity : 0
         }))

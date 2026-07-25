@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ProductionOrderScanLookupService } from './production-order-scan-lookup.service';
 
 describe('ProductionOrderScanLookupService', () => {
-  const lookupUrl = 'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
+  const lookupUrl = 'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai';
   let fetchMock: jest.Mock;
 
   beforeEach(() => {
@@ -135,7 +135,7 @@ describe('ProductionOrderScanLookupService', () => {
     await service.lookup('CODE-001');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://kdportal.kuangdacn.com/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai',
+      'http://192.168.1.151/ZTPDA/ServerCommand/getProductionOrderByShuiXiMai',
       expect.any(Object)
     );
   });

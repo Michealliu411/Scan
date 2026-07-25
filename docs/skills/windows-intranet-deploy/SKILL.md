@@ -116,6 +116,10 @@ Use for service restart only.
 ```
 
 Do not modify dependencies, database, or build outputs in restart mode.
+Restart mode must stop both app tasks, terminate residual project Node processes,
+verify the API and Web ports are released, and then start both tasks together.
+API and Web health checks must pass or deployment must fail. Do not restart only
+one scheduled task.
 
 ## PowerShell Script Requirements
 
@@ -237,15 +241,15 @@ ScanWeb -> powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\app\run-we
 
 Use SYSTEM principal and AtStartup trigger for simple server apps.
 
-Daily operations:
+Daily status and restart operations:
 
 ```powershell
 Get-ScheduledTask ScanApi, ScanWeb
-Start-ScheduledTask ScanApi
-Stop-ScheduledTask ScanApi
-Start-ScheduledTask ScanWeb
-Stop-ScheduledTask ScanWeb
+.\scripts\deploy-windows.ps1 -Mode Restart -ServerIp "192.168.1.144"
 ```
+
+Stopping a scheduled task may leave its child Node process alive. Treat the
+deployment script's Restart mode as the only supported application restart path.
 
 ## Static Web Server
 
